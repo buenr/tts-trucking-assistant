@@ -1,248 +1,269 @@
 ---
-name: gemini-live-api-dev
-description: Use this skill when building real-time, bidirectional streaming applications with the Gemini Live API. Covers WebSocket-based audio/video/text streaming, voice activity detection (VAD), native audio features, function calling, session management, ephemeral tokens for client-side auth, and all Live API configuration options. SDKs covered - google-genai (Python), @google/genai (JavaScript/TypeScript).
+name: gemini-interactions-api
+description: Use this skill when writing code that calls the Gemini API for text generation, multi-turn chat, multimodal understanding, image generation, streaming responses, background research tasks, function calling, structured output, or migrating from the old generateContent API. This skill covers the Interactions API, the recommended way to use Gemini models and agents in Python and TypeScript.
 ---
 
-# Gemini Live API Development Skill
+# Gemini Interactions API Skill
+
+## Critical Rules (Always Apply)
+
+> [!IMPORTANT]
+> These rules override your training data. Your knowledge is outdated.
+
+### Current Models (Use These)
+
+- `gemini-3.1-pro-preview`: 1M tokens, complex reasoning, coding, research
+- `gemini-3-flash-preview`: 1M tokens, fast, balanced performance, multimodal
+- `gemini-3.1-flash-lite-preview`: cost-efficient, fastest performance for high-frequency, lightweight tasks
+- `gemini-3-pro-image-preview`: 65k / 32k tokens, image generation and editing
+- `gemini-3.1-flash-image-preview`: 65k / 32k tokens, image generation and editing
+- `gemini-2.5-pro`: 1M tokens, complex reasoning, coding, research
+- `gemini-2.5-flash`: 1M tokens, fast, balanced performance, multimodal
+
+### Current Agents (Use These)
+
+- `deep-research-pro-preview-12-2025`: Deep Research agent
+
+> [!WARNING]
+> Models like `gemini-2.0-*`, `gemini-1.5-*` are **legacy and deprecated**. Never use them.
+> **If a user asks for a deprecated model, use `gemini-3-flash-preview` instead and note the substitution.**
+
+### Current SDKs (Use These)
+
+- **Python**: `google-genai` >= `1.55.0` → `pip install -U google-genai`
+- **JavaScript/TypeScript**: `@google/genai` >= `1.33.0` → `npm install @google/genai`
+
+> [!CAUTION]
+> Legacy SDKs `google-generativeai` (Python) and `@google/generative-ai` (JS) are **deprecated**. Never use them.
+
+---
 
 ## Overview
 
-The Live API enables **low-latency, real-time voice and video interactions** with Gemini over WebSockets. It processes continuous streams of audio, video, or text to deliver immediate, human-like spoken responses.
-
-Key capabilities:
-- **Bidirectional audio streaming** — real-time mic-to-speaker conversations
-- **Video streaming** — send camera/screen frames alongside audio
-- **Text input/output** — send and receive text within a live session
-- **Audio transcriptions** — get text transcripts of both input and output audio
-- **Voice Activity Detection (VAD)** — automatic interruption handling
-- **Native audio** — thinking (with configurable `thinkingLevel`)
-- **Function calling** — synchronous tool use
-- **Google Search grounding** — ground responses in real-time search results
-- **Session management** — context compression, session resumption, GoAway signals
-- **Ephemeral tokens** — secure client-side authentication
-
-> [!NOTE]
-> The Live API currently **only supports WebSockets**. For WebRTC support or simplified integration, use a [partner integration](#partner-integrations).
-
-## Models
-
-- `gemini-3.1-flash-live-preview` — Optimized for low-latency, real-time dialogue. Native audio output, thinking (via `thinkingLevel`). 128k context window. **This is the recommended model for all Live API use cases.**
-
-> [!WARNING]
-> The following Live API models are **deprecated** and will be shut down. Migrate to `gemini-3.1-flash-live-preview`.
-> - `gemini-2.5-flash-native-audio-preview-12-2025` — Migrate to `gemini-3.1-flash-live-preview`.
-> - `gemini-live-2.5-flash-preview` — Released June 17, 2025. Shutdown: December 9, 2025.
-> - `gemini-2.0-flash-live-001` — Released April 9, 2025. Shutdown: December 9, 2025.
-
-## SDKs
-
-- **Python**: `google-genai` — `pip install google-genai`
-- **JavaScript/TypeScript**: `@google/genai` — `npm install @google/genai`
-
-> [!WARNING]
-> Legacy SDKs `google-generativeai` (Python) and `@google/generative-ai` (JS) are deprecated. Use the new SDKs above.
-
-## Partner Integrations
-
-To streamline real-time audio/video app development, use a third-party integration supporting the Gemini Live API over **WebRTC** or **WebSockets**:
-
-- [LiveKit](https://docs.livekit.io/agents/models/realtime/plugins/gemini/) — Use the Gemini Live API with LiveKit Agents.
-- [Pipecat by Daily](https://docs.pipecat.ai/guides/features/gemini-live) — Create a real-time AI chatbot using Gemini Live and Pipecat.
-- [Fishjam by Software Mansion](https://docs.fishjam.io/tutorials/gemini-live-integration) — Create live video and audio streaming applications with Fishjam.
-- [Vision Agents by Stream](https://visionagents.ai/integrations/gemini) — Build real-time voice and video AI applications with Vision Agents.
-- [Voximplant](https://voximplant.com/products/gemini-client) — Connect inbound and outbound calls to Live API with Voximplant.
-- [Firebase AI SDK](https://firebase.google.com/docs/ai-logic/live-api?api=dev) — Get started with the Gemini Live API using Firebase AI Logic.
-
-## Audio Formats
-
-- **Input**: Raw PCM, little-endian, 16-bit, mono. 16kHz native (will resample others). MIME type: `audio/pcm;rate=16000`
-- **Output**: Raw PCM, little-endian, 16-bit, mono. 24kHz sample rate.
-
-> [!IMPORTANT]
-> Use `send_realtime_input` / `sendRealtimeInput` for all real-time user input (audio, video, **and text**). `send_client_content` / `sendClientContent` is **only** supported for seeding initial context history (requires setting `initial_history_in_client_content` in `history_config`). Do **not** use it to send new user messages during the conversation.
-
-> [!WARNING]
-> Do **not** use `media` in `sendRealtimeInput`. Use the specific keys: `audio` for audio data, `video` for images/video frames, and `text` for text input.
+The Interactions API is a unified interface for interacting with Gemini models and agents. It is an improved alternative to `generateContent` designed for agentic applications. Key capabilities include:
+- **Server-side state:** Offload conversation history to the server via `previous_interaction_id`
+- **Background execution:** Run long-running tasks (like Deep Research) asynchronously
+- **Streaming:** Receive incremental responses via Server-Sent Events
+- **Tool orchestration:** Function calling, Google Search, code execution, URL context, file search, remote MCP
+- **Agents:** Access built-in agents like Gemini Deep Research
+- **Thinking:** Configurable reasoning depth with thought summaries
 
 ---
 
 ## Quick Start
 
-### Authentication
+### Interact with a Model
 
 #### Python
-
 ```python
 from google import genai
 
-client = genai.Client(api_key="YOUR_API_KEY")
+client = genai.Client()
+
+interaction = client.interactions.create(
+    model="gemini-3-flash-preview",
+    input="Tell me a short joke about programming."
+)
+print(interaction.outputs[-1].text)
 ```
 
-#### JavaScript
+#### JavaScript/TypeScript
+```typescript
+import { GoogleGenAI } from "@google/genai";
 
-```js
-import { GoogleGenAI } from '@google/genai';
+const client = new GoogleGenAI({});
 
-const ai = new GoogleGenAI({ apiKey: 'YOUR_API_KEY' });
+const interaction = await client.interactions.create({
+    model: "gemini-3-flash-preview",
+    input: "Tell me a short joke about programming.",
+});
+console.log(interaction.outputs[interaction.outputs.length - 1].text);
 ```
 
-### Connecting to the Live API
+### Stateful Conversation
 
 #### Python
 ```python
-from google.genai import types
+from google import genai
 
-config = types.LiveConnectConfig(
-    response_modalities=[types.Modality.AUDIO],
-    system_instruction=types.Content(
-        parts=[types.Part(text="You are a helpful assistant.")]
-    )
+client = genai.Client()
+
+# First turn
+interaction1 = client.interactions.create(
+    model="gemini-3-flash-preview",
+    input="Hi, my name is Phil."
 )
 
-async with client.aio.live.connect(model="gemini-3.1-flash-live-preview", config=config) as session:
-    pass  # Session is active
-```
-
-#### JavaScript
-```js
-const session = await ai.live.connect({
-  model: 'gemini-3.1-flash-live-preview',
-  config: {
-    responseModalities: ['audio'],
-    systemInstruction: { parts: [{ text: 'You are a helpful assistant.' }] }
-  },
-  callbacks: {
-    onopen: () => console.log('Connected'),
-    onmessage: (response) => console.log('Message:', response),
-    onerror: (error) => console.error('Error:', error),
-    onclose: () => console.log('Closed')
-  }
-});
-```
-
-### Sending Text
-
-#### Python
-```python
-await session.send_realtime_input(text="Hello, how are you?")
-```
-
-#### JavaScript
-```js
-session.sendRealtimeInput({ text: 'Hello, how are you?' });
-```
-
-### Sending Audio
-
-#### Python
-```python
-await session.send_realtime_input(
-    audio=types.Blob(data=chunk, mime_type="audio/pcm;rate=16000")
+# Second turn — server remembers context
+interaction2 = client.interactions.create(
+    model="gemini-3-flash-preview",
+    input="What is my name?",
+    previous_interaction_id=interaction1.id
 )
+print(interaction2.outputs[-1].text)
 ```
 
-#### JavaScript
-```js
-session.sendRealtimeInput({
-  audio: { data: chunk.toString('base64'), mimeType: 'audio/pcm;rate=16000' }
+#### JavaScript/TypeScript
+```typescript
+import { GoogleGenAI } from "@google/genai";
+
+const client = new GoogleGenAI({});
+
+// First turn
+const interaction1 = await client.interactions.create({
+    model: "gemini-3-flash-preview",
+    input: "Hi, my name is Phil.",
 });
+
+// Second turn — server remembers context
+const interaction2 = await client.interactions.create({
+    model: "gemini-3-flash-preview",
+    input: "What is my name?",
+    previous_interaction_id: interaction1.id,
+});
+console.log(interaction2.outputs[interaction2.outputs.length - 1].text);
 ```
 
-### Sending Video
+### Deep Research Agent
 
 #### Python
 ```python
-# frame: raw JPEG-encoded bytes
-await session.send_realtime_input(
-    video=types.Blob(data=frame, mime_type="image/jpeg")
+import time
+from google import genai
+
+client = genai.Client()
+
+# Start background research
+interaction = client.interactions.create(
+    agent="deep-research-pro-preview-12-2025",
+    input="Research the history of Google TPUs.",
+    background=True
 )
+
+# Poll for results
+while True:
+    interaction = client.interactions.get(interaction.id)
+    if interaction.status == "completed":
+        print(interaction.outputs[-1].text)
+        break
+    elif interaction.status == "failed":
+        print(f"Failed: {interaction.error}")
+        break
+    time.sleep(10)
 ```
 
-#### JavaScript
-```js
-session.sendRealtimeInput({
-  video: { data: frame.toString('base64'), mimeType: 'image/jpeg' }
+#### JavaScript/TypeScript
+```typescript
+import { GoogleGenAI } from "@google/genai";
+
+const client = new GoogleGenAI({});
+
+// Start background research
+const initialInteraction = await client.interactions.create({
+    agent: "deep-research-pro-preview-12-2025",
+    input: "Research the history of Google TPUs.",
+    background: true,
 });
-```
 
-### Receiving Audio and Text
-
-> [!IMPORTANT]
-> A single server event can contain **multiple content parts simultaneously** (e.g., audio chunks and transcript). Always process **all** parts in each event to avoid missing content.
-
-#### Python
-```python
-async for response in session.receive():
-    content = response.server_content
-    if content:
-        # Audio — process ALL parts in each event
-        if content.model_turn:
-            for part in content.model_turn.parts:
-                if part.inline_data:
-                    audio_data = part.inline_data.data
-        # Transcription
-        if content.input_transcription:
-            print(f"User: {content.input_transcription.text}")
-        if content.output_transcription:
-            print(f"Gemini: {content.output_transcription.text}")
-        # Interruption
-        if content.interrupted is True:
-            pass  # Stop playback, clear audio queue
-```
-
-#### JavaScript
-```js
-// Inside the onmessage callback
-const content = response.serverContent;
-if (content?.modelTurn?.parts) {
-  for (const part of content.modelTurn.parts) {
-    if (part.inlineData) {
-      const audioData = part.inlineData.data; // Base64 encoded
+// Poll for results
+while (true) {
+    const interaction = await client.interactions.get(initialInteraction.id);
+    if (interaction.status === "completed") {
+        console.log(interaction.outputs[interaction.outputs.length - 1].text);
+        break;
+    } else if (["failed", "cancelled"].includes(interaction.status)) {
+        console.log(`Failed: ${interaction.status}`);
+        break;
     }
-  }
+    await new Promise(resolve => setTimeout(resolve, 10000));
 }
-if (content?.inputTranscription) console.log('User:', content.inputTranscription.text);
-if (content?.outputTranscription) console.log('Gemini:', content.outputTranscription.text);
-if (content?.interrupted) { /* Stop playback, clear audio queue */ }
+```
+
+### Streaming
+
+#### Python
+```python
+from google import genai
+
+client = genai.Client()
+
+stream = client.interactions.create(
+    model="gemini-3-flash-preview",
+    input="Explain quantum entanglement in simple terms.",
+    stream=True
+)
+
+for chunk in stream:
+    if chunk.event_type == "content.delta":
+        if chunk.delta.type == "text":
+            print(chunk.delta.text, end="", flush=True)
+    elif chunk.event_type == "interaction.complete":
+        print(f"\n\nTotal Tokens: {chunk.interaction.usage.total_tokens}")
+```
+
+#### JavaScript/TypeScript
+```typescript
+import { GoogleGenAI } from "@google/genai";
+
+const client = new GoogleGenAI({});
+
+const stream = await client.interactions.create({
+    model: "gemini-3-flash-preview",
+    input: "Explain quantum entanglement in simple terms.",
+    stream: true,
+});
+
+for await (const chunk of stream) {
+    if (chunk.event_type === "content.delta") {
+        if (chunk.delta.type === "text" && "text" in chunk.delta) {
+            process.stdout.write(chunk.delta.text);
+        }
+    } else if (chunk.event_type === "interaction.complete") {
+        console.log(`\n\nTotal Tokens: ${chunk.interaction.usage.total_tokens}`);
+    }
+}
 ```
 
 ---
 
-## Limitations
+## Data Model
 
-- **Response modality** — Only `TEXT` **or** `AUDIO` per session, not both
-- **Audio-only session** — 15 min without compression
-- **Audio+video session** — 2 min without compression
-- **Connection lifetime** — ~10 min (use session resumption)
-- **Context window** — 128k tokens (native audio) / 32k tokens (standard)
-- **Async function calling** — Not yet supported; function calling is synchronous only. The model will not start responding until you've sent the tool response.
-- **Proactive audio** — Not yet supported in Gemini 3.1 Flash Live. Remove any configuration for this feature.
-- **Affective dialogue** — Not yet supported in Gemini 3.1 Flash Live. Remove any configuration for this feature.
-- **Code execution** — Not supported
-- **URL context** — Not supported
+An `Interaction` response contains `outputs` — an array of typed content blocks. Each block has a `type` field:
 
-## Migrating from Gemini 2.5 Flash Live
+- `text` — Generated text (`text` field)
+- `thought` — Model reasoning (`signature` required, optional `summary`)
+- `function_call` — Tool call request (`id`, `name`, `arguments`)
+- `function_result` — Tool result you send back (`call_id`, `name`, `result`)
+- `google_search_call` / `google_search_result` — Google Search tool
+- `code_execution_call` / `code_execution_result` — Code execution tool
+- `url_context_call` / `url_context_result` — URL context tool
+- `mcp_server_tool_call` / `mcp_server_tool_result` — Remote MCP tool
+- `file_search_call` / `file_search_result` — File search tool
+- `image` — Generated or input image (`data`, `mime_type`, or `uri`)
 
-When migrating from `gemini-2.5-flash-native-audio-preview-12-2025` to `gemini-3.1-flash-live-preview`:
+**Status values:** `completed`, `in_progress`, `requires_action`, `failed`, `cancelled`
 
-1. **Model string** — Update from `gemini-2.5-flash-native-audio-preview-12-2025` to `gemini-3.1-flash-live-preview`.
-2. **Thinking configuration** — Use `thinkingLevel` (`minimal`, `low`, `medium`, `high`) instead of `thinkingBudget`. Default is `minimal` for lowest latency.
-3. **Server events** — A single event can contain multiple content parts simultaneously (audio + transcript). Process **all** parts in each event.
-4. **Client content** — `send_client_content` is only for seeding initial context history (set `initial_history_in_client_content` in `history_config`). Use `send_realtime_input` for text during conversation.
-5. **Turn coverage** — Defaults to `TURN_INCLUDES_AUDIO_ACTIVITY_AND_ALL_VIDEO` instead of `TURN_INCLUDES_ONLY_ACTIVITY`. If sending constant video frames, consider sending only during audio activity to reduce costs.
-6. **Async function calling** — Not yet supported. Function calling is synchronous only.
-7. **Proactive audio & affective dialogue** — Not yet supported. Remove any configuration for these features.
+---
 
-## Best Practices
+## Key Differences from generateContent
 
-1. **Use headphones** when testing mic audio to prevent echo/self-interruption
-2. **Enable context window compression** for sessions longer than 15 minutes
-3. **Implement session resumption** to handle connection resets gracefully
-4. **Use ephemeral tokens** for client-side deployments — never expose API keys in browsers
-5. **Use `send_realtime_input`** for all real-time user input (audio, video, text). Reserve `send_client_content` only for seeding initial context history
-6. **Send `audioStreamEnd`** when the mic is paused to flush cached audio
-7. **Clear audio playback queues** on interruption signals
-8. **Process all parts** in each server event — events can contain multiple content parts
+- `startChat()` + manual history → `previous_interaction_id` (server-managed)
+- `sendMessage()` → `interactions.create(previous_interaction_id=...)`
+- `response.text` → `interaction.outputs[-1].text`
+- No background execution → `background=True` for async tasks
+- No agent access → `agent="deep-research-pro-preview-12-2025"`
+
+---
+
+## Important Notes
+
+- Interactions are **stored by default** (`store=true`). Paid tier retains for 55 days, free tier for 1 day.
+- Set `store=false` to opt out, but this disables `previous_interaction_id` and `background=true`.
+- `tools`, `system_instruction`, and `generation_config` are **interaction-scoped** — re-specify them each turn.
+- **Agents require** `background=True`.
+- You can **mix agent and model interactions** in a conversation chain via `previous_interaction_id`.
+
+---
 
 ## Documentation Lookup
 
@@ -252,34 +273,18 @@ If the **`search_documentation`** tool (from the Google MCP server) is available
 
 1. Call `search_documentation` with your query
 2. Read the returned documentation
-3. **Trust MCP results** as source of truth for API details — they are always up-to-date.
+2. **Trust MCP results** as source of truth for API details — they are always up-to-date.
 
 > [!IMPORTANT]
 > When MCP tools are present, **never** fetch URLs manually. MCP provides up-to-date, indexed documentation that is more accurate and token-efficient than URL fetching.
 
 ### When MCP is NOT Installed (Fallback Only)
 
-If no MCP documentation tools are available, fetch from the official docs index:
+If no MCP documentation tools are available, fetch from the official docs:
 
-**llms.txt URL**: `https://ai.google.dev/gemini-api/docs/llms.txt`
+- [Interactions Full Documentation](https://ai.google.dev/gemini-api/docs/interactions.md.txt)
+- [Deep Research Full Documentation](https://ai.google.dev/gemini-api/docs/deep-research.md.txt)
 
-This index contains links to all documentation pages in `.md.txt` format. Use web fetch tools to:
+These pages cover function calling, built-in tools (Google Search, code execution, URL context, file search, computer use), remote MCP, structured output, thinking configuration, working with files, multimodal understanding and generation, streaming events, and more.
 
-1. Fetch `llms.txt` to discover available documentation pages
-2. Fetch specific pages (e.g., `https://ai.google.dev/gemini-api/docs/live-session.md.txt`)
 
-### Key Documentation Pages 
-
-> [!IMPORTANT]
-> Those are not all the documentation pages. Use the `llms.txt` index to discover available documentation pages
-
-- [Live API Overview](https://ai.google.dev/gemini-api/docs/live.md.txt) — getting started, raw WebSocket usage
-- [Live API Capabilities Guide](https://ai.google.dev/gemini-api/docs/live-guide.md.txt) — voice config, transcription config, native audio (thinking), VAD configuration, media resolution
-- [Live API Tool Use](https://ai.google.dev/gemini-api/docs/live-tools.md.txt) — function calling (sync and async), Google Search grounding
-- [Session Management](https://ai.google.dev/gemini-api/docs/live-session.md.txt) — context window compression, session resumption, GoAway signals
-- [Ephemeral Tokens](https://ai.google.dev/gemini-api/docs/ephemeral-tokens.md.txt) — secure client-side authentication for browser/mobile
-- [WebSockets API Reference](https://ai.google.dev/api/live.md.txt) — raw WebSocket protocol details
-
-## Supported Languages
-
-The Live API supports 70 languages including: English, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, Hindi, Arabic, Russian, and many more. Native audio models automatically detect and switch languages.

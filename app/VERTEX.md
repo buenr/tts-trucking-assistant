@@ -1,6 +1,6 @@
 ---
 name: vertex-ai-api-dev
-description: Guides the usage of Gemini API on Google Cloud Vertex AI with the Gen AI SDK. Use when the user asks about using Gemini in an enterprise environment or explicitly mentions Vertex AI. Covers SDK usage (Python, JS/TS, Go, Java, C#), capabilities like Live API, tools, multimedia generation, caching, and batch prediction.
+description: Guides the usage of Gemini API on Google Cloud Vertex AI with the Gen AI SDK. Use when the user asks about using Gemini in an enterprise environment or explicitly mentions Vertex AI. Covers SDK usage (Python, JS/TS, Go, Java, C#), capabilities like tools, multimedia generation, caching, and batch prediction.
 compatibility: Requires active Google Cloud credentials and Vertex AI API enabled.
 ---
 
@@ -112,7 +112,7 @@ Use the following models if explicitly requested:
 from google import genai
 client = genai.Client()
 response = client.models.generate_content(
-    model="gemini-3-flash-preview",
+    model="gemini-2.5-pro",
     contents="Explain quantum computing"
 )
 print(response.text)
@@ -123,7 +123,7 @@ print(response.text)
 import { GoogleGenAI } from "@google/genai";
 const ai = new GoogleGenAI({ vertexai: { project: "your-project-id", location: "global" } });
 const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-2.5-pro",
     contents: "Explain quantum computing"
 });
 console.log(response.text);
@@ -151,7 +151,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	resp, err := client.Models.GenerateContent(ctx, "gemini-3-flash-preview", genai.Text("Explain quantum computing"), nil)
+	resp, err := client.Models.GenerateContent(ctx, "gemini-2.5-pro", genai.Text("Explain quantum computing"), nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -170,7 +170,7 @@ public class GenerateTextFromTextInput {
     Client client = Client.builder().vertexAi(true).project("your-project-id").location("global").build();
     GenerateContentResponse response =
         client.models.generateContent(
-            "gemini-3-flash-preview",
+            "gemini-2.5-pro",
             "Explain quantum computing",
             null);
 
@@ -190,7 +190,7 @@ var client = new Client(
 );
 
 var response = await client.Models.GenerateContent(
-    "gemini-3-flash-preview",
+    "gemini-2.5-pro",
     "Explain quantum computing"
 );
 
@@ -219,7 +219,6 @@ Depending on the specific user request, refer to the following reference files f
 - **Structured Output & Tools**: JSON generation, Function Calling, Search Grounding, and Code Execution. See [references/structured_and_tools.md](references/structured_and_tools.md)
 - **Media Generation**: Image generation, Image editing, and Video generation. See [references/media_generation.md](references/media_generation.md)
 - **Bounding Box Detection**: Object detection and localization within images and video. See [references/bounding_box.md](references/bounding_box.md)
-- **Live API**: Real-time bidirectional streaming for voice, vision, and text. See [references/live_api.md](references/live_api.md)
 - **Advanced Features**: Content Caching, Batch Prediction, and Thinking/Reasoning. See [references/advanced_features.md](references/advanced_features.md)
 - **Safety**: Adjusting Responsible AI filters and thresholds. See [references/safety.md](references/safety.md)
 - **Model Tuning**: Supervised Fine-Tuning and Preference Tuning. See [references/model_tuning.md](references/model_tuning.md)

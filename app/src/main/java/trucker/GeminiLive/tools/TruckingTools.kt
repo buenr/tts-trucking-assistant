@@ -2,20 +2,18 @@ package trucker.geminilive.tools
 
 import trucker.geminilive.network.FunctionDeclaration
 import trucker.geminilive.network.Schema
-import trucker.geminilive.network.Tool
 import kotlinx.serialization.json.*
 
 object TruckingTools {
     private const val DEMO_DRIVER_ID = "284145"
     private const val DEMO_ACTIVE_LOAD_ID = "902771"
 
-    val declaration = Tool(
-        functionDeclarations = listOf(
+    val declaration = listOf(
             FunctionDeclaration(
                 name = "getDriverProfile",
                 description = "Returns deterministic driver profile, current location, tractor/trailer equipment snapshot, and compliance posture from pre-authenticated session context. Invocation condition: call when the driver asks who they are, where they are, what equipment they have, or their high-level compliance status.",
                 parameters = Schema(
-                    type = "object",
+                    type = "OBJECT",
                     properties = emptyMap()
                 )
             ),
@@ -23,7 +21,7 @@ object TruckingTools {
                 name = "getLoadStatus",
                 description = "Returns deterministic active-load progress including stop timeline, each stop status, and load-specific risks or blockers from pre-authenticated session context. Invocation condition: call when the driver asks about load status, stop ETAs, detention risk, or appointment timing.",
                 parameters = Schema(
-                    type = "object",
+                    type = "OBJECT",
                     properties = emptyMap()
                 )
             ),
@@ -31,7 +29,7 @@ object TruckingTools {
                 name = "getHoursOfServiceClocks",
                 description = "Returns deterministic Hours of Service (HOS) clock status and deadlines from pre-authenticated session context. Invocation condition: call when the driver asks about their available drive time, duty time, cycle time, or next required break.",
                 parameters = Schema(
-                    type = "object",
+                    type = "OBJECT",
                     properties = emptyMap()
                 )
             ),
@@ -39,7 +37,7 @@ object TruckingTools {
                 name = "getTrafficAndWeather",
                 description = "Returns deterministic traffic and weather intelligence for the next 1 hour of the current route. Invocation condition: call when the driver asks about immediate road conditions, weather, or traffic ahead.",
                 parameters = Schema(
-                    type = "object",
+                    type = "OBJECT",
                     properties = emptyMap()
                 )
             ),
@@ -47,9 +45,9 @@ object TruckingTools {
                 name = "getDispatchInbox",
                 description = "Returns deterministic dispatch inbox messages and open exceptions requiring driver action from pre-authenticated session context. Invocation condition: call when the driver asks about new dispatch instructions, unresolved issues, or messages needing acknowledgment.",
                 parameters = Schema(
-                    type = "object",
+                    type = "OBJECT",
                     properties = mapOf(
-                        "unreadOnly" to Schema(type = "boolean", description = "If true, return only unread dispatch items")
+                        "unreadOnly" to Schema(type = "BOOLEAN", description = "If true, return only unread dispatch items")
                     ),
                     required = listOf("unreadOnly")
                 )
@@ -58,7 +56,7 @@ object TruckingTools {
                 name = "getCompanyFAQs",
                 description = "Returns Swift Transportation FAQs bundles by category (Pet/Rider Policy, Macros, Running Late Procedure, Breakdown Protocol, Headset Recommendations, etc). Invocation condition: call when the driver asks company-policy/procedure questions not specific to a single load state.",
                 parameters = Schema(
-                    type = "object",
+                    type = "OBJECT",
                     properties = emptyMap()
                 )
             ),
@@ -66,7 +64,7 @@ object TruckingTools {
                 name = "getPaycheckInfo",
                 description = "Returns deterministic paycheck summary with associated miles metrics for the authenticated driver context. Invocation condition: call when the driver asks about pay, settlement amounts, CPM, gross/net totals, reimbursement, or miles tied to pay.",
                 parameters = Schema(
-                    type = "object",
+                    type = "OBJECT",
                     properties = emptyMap()
                 )
             ),
@@ -74,7 +72,7 @@ object TruckingTools {
                 name = "findNearestSwiftTerminal",
                 description = "Returns the nearest Swift Transportation terminal or drop yard, including distance and available amenities (showers, shop, wash, parking). Invocation condition: call when the driver asks about where to park, get a truck wash, or find terminal amenities.",
                 parameters = Schema(
-                    type = "object",
+                    type = "OBJECT",
                     properties = emptyMap()
                 )
             ),
@@ -82,7 +80,7 @@ object TruckingTools {
                 name = "checkSafetyScore",
                 description = "Returns the driver's current safety score, ranking, and recent telemetry events (e.g., hard braking, overspeeding). Invocation condition: call when the driver asks about their driving score, safety record, or bonus standing.",
                 parameters = Schema(
-                    type = "object",
+                    type = "OBJECT",
                     properties = emptyMap()
                 )
             ),
@@ -90,7 +88,7 @@ object TruckingTools {
                 name = "getFuelNetworkRouting",
                 description = "Returns the next approved in-network fuel stop (e.g., Swift Fuel Network, Pilot/Flying J) based on current location and route. Invocation condition: call when the driver asks where they should get fuel next.",
                 parameters = Schema(
-                    type = "object",
+                    type = "OBJECT",
                     properties = emptyMap()
                 )
             ),
@@ -98,7 +96,7 @@ object TruckingTools {
                 name = "getContacts",
                 description = "Returns contact information for Swift Transportation departments, Driver/Fleet Leaders, and support services. Invocation condition: call when the driver asks for phone numbers, how to reach dispatch, payroll, safety, breakdown, or their leader.",
                 parameters = Schema(
-                    type = "object",
+                    type = "OBJECT",
                     properties = emptyMap()
                 )
             ),
@@ -106,7 +104,7 @@ object TruckingTools {
                 name = "getNextLoadDetails",
                 description = "Returns deterministic details for the next scheduled load (pre-dispatch) including pickup/delivery windows and estimated miles from pre-authenticated session context. Invocation condition: call when the driver asks about their next load, what they are doing after the current load, or for details on a pending dispatch.",
                 parameters = Schema(
-                    type = "object",
+                    type = "OBJECT",
                     properties = emptyMap()
                 )
             ),
@@ -114,7 +112,7 @@ object TruckingTools {
                 name = "getMentorFAQs",
                 description = "Returns details about how to become a driver mentor, benefits of mentoring, and requirements. Invocation condition: call when the driver asks about becoming a mentor, training new drivers, or mentor pay.",
                 parameters = Schema(
-                    type = "object",
+                    type = "OBJECT",
                     properties = emptyMap()
                 )
             ),
@@ -122,12 +120,11 @@ object TruckingTools {
                 name = "getOwnerOperatorFAQs",
                 description = "Returns details about becoming an owner-operator at Swift, including lease options, pay structure (percentage-based), and equipment perks. Invocation condition: call when the driver asks about owning their own truck, leasing, or becoming their own boss.",
                 parameters = Schema(
-                    type = "object",
+                    type = "OBJECT",
                     properties = emptyMap()
                 )
             )
         )
-    )
 
     fun handleToolCall(name: String, args: Map<String, JsonElement>?): JsonElement {
         return when (name) {

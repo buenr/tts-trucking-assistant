@@ -66,6 +66,7 @@ class AudioRecorder {
                     val targetChunkSize = AudioConfig.TARGET_INPUT_CHUNK_BYTES
                     val staging = ByteArray(targetChunkSize * 8)
                     var stagedBytes = 0
+                    val chunkBuffer = ByteArray(targetChunkSize)
 
                     while (isRecording.get()) {
                         val currentRecord = synchronized(lock) { audioRecord }
@@ -75,36 +76,36 @@ class AudioRecorder {
                         if (bytesRead > 0 && isRecording.get()) {
                             
                             // Optimization for Galaxy Active 5: Down-mix Stereo to Mono
-                            val processedData = if (AudioConfig.HARDWARE_INPUT_CHANNEL_COUNT == 2 && 
+                            if (AudioConfig.HARDWARE_INPUT_CHANNEL_COUNT == 2 && 
                                 AudioConfig.TARGET_INPUT_CHANNEL_COUNT == 1) {
-                                downMixStereoToMono(readBuffer, bytesRead)
+                                
+                                for (i in 0 until bytesRead step 4) {
+                                    if (i + 3 >= bytesRead) break
+                                    val left = ((readBuffer[i + 1].toInt() shl 8) or (readBuffer[i].toInt() and 0xFF)).toShort()
+                                    val right = ((readBuffer[i + 3].toInt() shl 8) or (readBuffer[i + 2].toInt() and 0xFF)).toShort()
+                                    val mono = ((left.toInt() + right.toInt()) / 2).toShort()
+                                    
+                                    // Copy directly to staging to avoid intermediate array
+                                    if (stagedBytes + 2 <= staging.size) {
+                                        staging[stagedBytes++] = (mono.toInt() and 0xFF).toByte()
+                                        staging[stagedBytes++] = ((mono.toInt() shr 8) and 0xFF).toByte()
+                                    }
+                                }
                             } else {
-                                readBuffer.copyOf(bytesRead)
+                                val writable = minOf(staging.size - stagedBytes, bytesRead)
+                                System.arraycopy(readBuffer, 0, staging, stagedBytes, writable)
+                                stagedBytes += writable
                             }
 
-                            var offset = 0
-                            val dataSize = processedData.size
-                            while (offset < dataSize) {
-                                val writable = minOf(staging.size - stagedBytes, dataSize - offset)
-                                System.arraycopy(processedData, offset, staging, stagedBytes, writable)
-                                stagedBytes += writable
-                                offset += writable
-
-                                while (stagedBytes >= targetChunkSize && isRecording.get()) {
-                                    val chunk = ByteArray(targetChunkSize)
-                                    System.arraycopy(staging, 0, chunk, 0, targetChunkSize)
-                                    val remaining = stagedBytes - targetChunkSize
-                                    if (remaining > 0) {
-                                        System.arraycopy(staging, targetChunkSize, staging, 0, remaining)
-                                    }
-                                    stagedBytes = remaining
-                                    onAudioData(chunk)
+                            while (stagedBytes >= targetChunkSize && isRecording.get()) {
+                                System.arraycopy(staging, 0, chunkBuffer, 0, targetChunkSize)
+                                val remaining = stagedBytes - targetChunkSize
+                                if (remaining > 0) {
+                                    System.arraycopy(staging, targetChunkSize, staging, 0, remaining)
                                 }
-
-                                if (stagedBytes == staging.size) {
-                                    onAudioData(staging.copyOf(stagedBytes))
-                                    stagedBytes = 0
-                                }
+                                stagedBytes = remaining
+                                // Pass a copy because the receiver might be async
+                                onAudioData(chunkBuffer.copyOf())
                             }
                         }
                     }

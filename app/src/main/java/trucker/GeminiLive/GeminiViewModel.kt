@@ -2,130 +2,43 @@ package trucker.geminilive
 
 import android.app.Application
 import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import trucker.geminilive.audio.AudioPlayer
 import trucker.geminilive.audio.AudioRecorder
 import trucker.geminilive.audio.SoundManager
-import trucker.geminilive.network.GeminiState
-import trucker.geminilive.network.GeminiWebSocketClient
-import trucker.geminilive.network.VertexAuth
+import trucker.geminilive.audio.TtsManager
+import trucker.geminilive.network.*
 
 class GeminiViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = mutableStateOf(GeminiUiState())
     val uiState: State<GeminiUiState> = _uiState
 
+    private val _logs = mutableStateListOf<String>()
+    val logs: List<String> = _logs
+
     private val audioRecorder = AudioRecorder()
-    private val audioPlayer = AudioPlayer()
+    private val ttsManager = TtsManager(application)
     private val soundManager = SoundManager()
-    private var geminiClient: GeminiWebSocketClient
-    private var interruptionJob: Job? = null
+    private var geminiClient: GeminiRestClient
     private var toolTimerJob: Job? = null
-    private var pendingState: GeminiState? = null
     private var isRecording = false
+    private val audioBuffer = java.io.ByteArrayOutputStream()
+    private var processingJob: Job? = null
+    
+    // Server-side state management via interaction ID
+    // Replaces client-side conversationHistory
+    private var interactionId: String? = null
 
     init {
-        val projectId = VertexAuth.getProjectId(application)
-        geminiClient = GeminiWebSocketClient(
-            projectId = projectId,
-            onStatusUpdate = { status ->
-                updateUi { it.copy(status = status) }
-                addLog(status)
-            },
-            onStateChanged = { state ->
-                // If the 3-second processing timer is running, just queue the state change
-                if (toolTimerJob != null) {
-                    pendingState = state
-                } else {
-                    // Handle state transitions with synchronization for WORKING state
-                    when (state) {
-                        GeminiState.WORKING -> {
-                            pendingState = state
-                            updateUi { it.copy(aiState = state) }
-                            // Start 3-second synchronized delay
-                            audioPlayer.startBuffering()
-                            soundManager.startWorkingLoop()
-
-                            toolTimerJob?.cancel()
-                            toolTimerJob = viewModelScope.launch {
-                                delay(3000)
-                                // 3 seconds are up: release buffer and stop chime
-                                soundManager.stopLoop()
-                                audioPlayer.stopBufferingAndPlay()
-                                toolTimerJob = null
-
-                                // Apply the most recent state that arrived while we were waiting
-                                pendingState?.let { lastState ->
-                                    updateUi { it.copy(aiState = lastState) }
-                                }
-                            }
-                        }
-                        GeminiState.THINKING -> {
-                            pendingState = state
-                            updateUi { it.copy(aiState = state) }
-                            soundManager.startThinkingLoop()
-                        }
-                        else -> {
-
-                            pendingState = state
-                            updateUi {
-                                it.copy(
-                                    aiState = state,
-                                    currentTool = if (state != GeminiState.WORKING) "" else it.currentTool
-                                )
-                            }
-                            soundManager.stopLoop()
-                        }
-                    }
-                }
-            },
-            onReady = {
-                updateUi { it.copy(status = "Connected & Listening") }
-                addLog("Ready — starting mic")
-                startRecorder()
-            },
-            onAudioReceived = { audioData ->
-                audioPlayer.play(audioData)
-                if (interruptionJob != null) {
-                    viewModelScope.launch {
-                        interruptionJob?.cancel()
-                        interruptionJob = null
-                    }
-                }
-            },
-            onInterrupted = {
-                viewModelScope.launch {
-                    interruptionJob?.cancel()
-                    interruptionJob = launch {
-                        delay(200)
-                        audioPlayer.flush()
-                        addLog("Interruption confirmed")
-                        interruptionJob = null
-                    }
-                    addLog("Interrupted — waiting grace period")
-                    startRecorder()
-                }
-            },
-            onTurnComplete = {
-                viewModelScope.launch {
-                    interruptionJob?.cancel()
-                    interruptionJob = null
-                    addLog("Turn complete — resuming mic")
-                    startRecorder()
-                }
-            },
+        geminiClient = GeminiRestClient(
             onToolCallStarted = { toolName ->
                 updateUi { it.copy(currentTool = toolName) }
                 addLog("TOOL CALL: $toolName")
-            },
-            onError = { error ->
-                addLog("ERROR: $error")
-                updateUi { it.copy(lastError = error, status = "Error") }
-                stop()
             }
         )
     }
@@ -139,25 +52,195 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
     private fun addLog(message: String) {
         viewModelScope.launch {
             val timestamped = "[${System.currentTimeMillis() % 100000}] $message"
-            _uiState.value = _uiState.value.copy(
-                log = (_uiState.value.log + timestamped).takeLast(100)
-            )
+            _logs.add(timestamped)
+            if (_logs.size > 100) {
+                _logs.removeAt(0)
+            }
         }
     }
 
     private fun startRecorder() {
         if (isRecording) return
         isRecording = true
+        synchronized(audioBuffer) {
+            audioBuffer.reset()
+        }
+        updateUi { it.copy(aiState = GeminiState.LISTENING) }
+        
         audioRecorder.start { audioData ->
-            geminiClient.sendAudio(audioData)
+            // Accumulate audio data
+            synchronized(audioBuffer) {
+                audioBuffer.write(audioData)
+            }
         }
     }
 
-    private fun stopRecorder() {
+    private fun stopRecorderAndProcess() {
         if (!isRecording) return
         isRecording = false
         audioRecorder.stop()
-        geminiClient.sendAudioStreamEnd()
+        
+        // Get accumulated audio
+        val audioToProcess = synchronized(audioBuffer) {
+            val bytes = audioBuffer.toByteArray()
+            audioBuffer.reset()
+            bytes
+        }
+        
+        if (audioToProcess.isEmpty()) {
+            addLog("No audio to process")
+            startRecorder()
+            return
+        }
+        
+        addLog("Processing ${audioToProcess.size} bytes of audio")
+        processAudio(audioToProcess)
+    }
+
+    private fun processAudio(audioData: ByteArray) {
+        processingJob?.cancel()
+        processingJob = viewModelScope.launch {
+            updateUi { it.copy(aiState = GeminiState.THINKING) }
+            soundManager.startThinkingLoop()
+            
+            try {
+                val apiKey = VertexAuth.getApiKey(getApplication())
+                val partialTextBuffer = StringBuilder()
+                var streamingStarted = false
+
+                val response = geminiClient.createInteractionStream(
+                    audioData = audioData,
+                    apiKey = apiKey,
+                    previousInteractionId = interactionId
+                ) { deltaText ->
+                    synchronized(partialTextBuffer) {
+                        partialTextBuffer.append(deltaText)
+                        val buffered = partialTextBuffer.toString()
+                        val shouldStartSpeaking = !streamingStarted &&
+                            (buffered.length >= 18 || buffered.count { it == ' ' } >= 3)
+
+                        if (shouldStartSpeaking) {
+                            streamingStarted = true
+                            val firstChunk = buffered.trim()
+                            partialTextBuffer.clear()
+
+                            soundManager.stopLoop()
+                            viewModelScope.launch {
+                                addLog("Gemini streaming: ${firstChunk.take(100)}...")
+                                updateUi { it.copy(aiState = GeminiState.SPEAKING) }
+                                ttsManager.speak(firstChunk)
+                            }
+                        } else if (streamingStarted) {
+                            val delta = deltaText.trim()
+                            if (delta.isNotEmpty()) {
+                                viewModelScope.launch {
+                                    ttsManager.speak(delta)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                synchronized(partialTextBuffer) {
+                    if (partialTextBuffer.isNotBlank()) {
+                        val leftover = partialTextBuffer.toString().trim()
+                        partialTextBuffer.clear()
+                        if (leftover.isNotBlank()) {
+                            ttsManager.speak(leftover)
+                        }
+                    }
+                }
+
+                if (!streamingStarted) {
+                    soundManager.stopLoop()
+                }
+
+                when (response) {
+                    is GeminiResponse.Text -> {
+                        interactionId = response.interactionId
+                        addLog("Interaction ID: ${response.interactionId}")
+
+                        if (!streamingStarted) {
+                            soundManager.stopLoop()
+                            if (response.text.isNotBlank()) {
+                                addLog("Gemini: ${response.text.take(100)}...")
+                                updateUi { it.copy(aiState = GeminiState.SPEAKING) }
+                                ttsManager.speak(response.text)
+                            }
+                        }
+
+                        delay(500)
+                        startRecorder()
+                    }
+                    is GeminiResponse.NeedsFunctionCall -> {
+                        interactionId = response.interactionId
+                        addLog("Interaction ID: ${response.interactionId}")
+
+                        if (response.calls.isEmpty()) {
+                            addLog("Error: Model requested action but provided no function calls")
+                            soundManager.stopLoop()
+                            delay(500)
+                            startRecorder()
+                            return@launch
+                        }
+
+                        updateUi { it.copy(aiState = GeminiState.WORKING) }
+                        soundManager.startWorkingLoop()
+
+                        val finalResponse = geminiClient.sendFunctionResults(
+                            functionResults = response.calls.map { call ->
+                                FunctionResult(
+                                    callId = call.id,
+                                    name = call.name,
+                                    result = call.result
+                                )
+                            },
+                            apiKey = apiKey,
+                            previousInteractionId = interactionId!!
+                        )
+
+                        soundManager.stopLoop()
+
+                        when (finalResponse) {
+                            is GeminiResponse.Text -> {
+                                interactionId = finalResponse.interactionId
+                                addLog("Interaction ID: ${finalResponse.interactionId}")
+
+                                if (finalResponse.text.isNotBlank()) {
+                                    addLog("Gemini: ${finalResponse.text.take(100)}...")
+                                    updateUi { it.copy(aiState = GeminiState.SPEAKING) }
+                                    ttsManager.speak(finalResponse.text)
+                                }
+                            }
+                            is GeminiResponse.Error -> {
+                                addLog("Error: ${finalResponse.message}")
+                                ttsManager.speak("Sorry, I encountered an error. Please try again.")
+                            }
+                            else -> {
+                                addLog("Unexpected response type")
+                            }
+                        }
+
+                        delay(500)
+                        startRecorder()
+                    }
+                    is GeminiResponse.Error -> {
+                        soundManager.stopLoop()
+                        addLog("Error: ${response.message}")
+                        updateUi { it.copy(lastError = response.message, aiState = GeminiState.IDLE) }
+                        ttsManager.speak("Sorry, I encountered an error. Please try again.")
+                        delay(500)
+                        startRecorder()
+                    }
+                }
+            } catch (e: Exception) {
+                soundManager.stopLoop()
+                addLog("Exception: ${e.message}")
+                updateUi { it.copy(lastError = e.message ?: "Unknown error", aiState = GeminiState.IDLE) }
+                delay(500)
+                startRecorder()
+            }
+        }
     }
 
     fun toggleConnection() {
@@ -169,48 +252,50 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun start() {
-        // Immediate reset for a clean start
         _uiState.value = _uiState.value.copy(
             isConnected = true,
-            status = "Connecting...",
+            status = "Connected",
             aiState = GeminiState.IDLE,
             currentTool = "",
-            log = emptyList(),
             lastError = "",
             userText = "",
             geminiText = ""
         )
-        addLog("Starting session...")
-        viewModelScope.launch {
-            try {
-                val token = VertexAuth.getAccessToken(getApplication())
-                geminiClient.connect(token)
-            } catch (e: Exception) {
-                updateUi { it.copy(status = "Failed", lastError = e.message ?: "Unknown error") }
-                addLog("Connection failed: ${e.message}")
-            }
-        }
+        _logs.clear()
+        // Clear interaction ID for new session
+        interactionId = null
+        addLog("Session started - tap button to speak")
     }
 
     private fun stop() {
-        interruptionJob?.cancel()
-        interruptionJob = null
+        processingJob?.cancel()
         toolTimerJob?.cancel()
-        toolTimerJob = null
-        pendingState = null
-        stopRecorder()
-        audioPlayer.stop()
+        isRecording = false
+        audioRecorder.stop()
+        ttsManager.stop()
         soundManager.stopLoop()
-        geminiClient.disconnect()
+        // Clear interaction ID when session stops
+        interactionId = null
         
-        updateUi { it.copy(isConnected = false, status = "Disconnected") }
+        updateUi { it.copy(isConnected = false, status = "Disconnected", aiState = GeminiState.IDLE) }
         addLog("Session stopped")
+    }
+
+    fun toggleRecording() {
+        if (!uiState.value.isConnected) return
+        
+        if (isRecording) {
+            stopRecorderAndProcess()
+        } else {
+            startRecorder()
+        }
     }
 
     override fun onCleared() {
         super.onCleared()
         stop()
         soundManager.release()
+        ttsManager.release()
     }
 }
 
@@ -221,10 +306,5 @@ data class GeminiUiState(
     val userText: String = "",
     val geminiText: String = "",
     val currentTool: String = "",
-    val lastError: String = "",
-    val log: List<String> = emptyList()
+    val lastError: String = ""
 )
-
-
-
-

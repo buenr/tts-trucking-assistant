@@ -63,7 +63,9 @@ class MainActivity : ComponentActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     CopilotScreen(
                         uiState = uiState,
+                        logs = viewModel.logs,
                         onToggle = { viewModel.toggleConnection() },
+                        onPushToTalk = { viewModel.toggleRecording() },
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
@@ -87,7 +89,9 @@ fun KeepScreenOn() {
 @Composable
 fun CopilotScreen(
     uiState: GeminiUiState,
+    logs: List<String>,
     onToggle: () -> Unit,
+    onPushToTalk: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -130,7 +134,7 @@ fun CopilotScreen(
                     Text("START", fontSize = 28.sp, fontWeight = FontWeight.Black)
                 }
             } else {
-                StateIndicator(uiState.aiState, uiState.currentTool, onToggle)
+                StateIndicator(uiState.aiState, uiState.currentTool, onPushToTalk)
             }
         }
 
@@ -145,9 +149,9 @@ fun CopilotScreen(
             color = Color.Black
         ) {
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            LaunchedEffect(uiState.log.size) {
-                if (uiState.log.isNotEmpty()) {
-                    listState.animateScrollToItem(uiState.log.size - 1)
+            LaunchedEffect(logs.size) {
+                if (logs.isNotEmpty()) {
+                    listState.animateScrollToItem(logs.size - 1)
                 }
             }
             androidx.compose.foundation.lazy.LazyColumn(
@@ -157,10 +161,10 @@ fun CopilotScreen(
                     .padding(8.dp)
             ) {
                 items(
-                    count = uiState.log.size,
+                    count = logs.size,
                     itemContent = { index ->
                         Text(
-                            text = uiState.log[index],
+                            text = logs[index],
                             color = Color(0xFF00FF00), // Terminal green
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.sp,
@@ -193,6 +197,14 @@ fun CopilotScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
+                if (uiState.lastError.isNotEmpty()) {
+                    Text(
+                        text = uiState.lastError,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Red,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
             }
             if (uiState.isConnected) {
                 TextButton(onClick = onToggle) {
@@ -204,26 +216,28 @@ fun CopilotScreen(
 }
 
 @Composable
-fun StateIndicator(state: GeminiState, currentTool: String, onStop: () -> Unit) {
+fun StateIndicator(state: GeminiState, currentTool: String, onPushToTalk: () -> Unit) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     
     val color = when (state) {
-        GeminiState.IDLE -> Color.Gray
-        GeminiState.LISTENING -> Color(0xFF4CAF50) // Green
+        GeminiState.IDLE -> Color(0xFF4CAF50) // Green - ready to record
+        GeminiState.LISTENING -> Color(0xFFFF5722) // Orange - recording
         GeminiState.THINKING -> Color(0xFFFFC107) // Amber
         GeminiState.WORKING -> Color(0xFF2196F3)  // Blue
-        GeminiState.SPEAKING -> Color.White
+        GeminiState.SPEAKING -> Color(0xFF9C27B0) // Purple
     }
 
     val icon = when (state) {
-        GeminiState.IDLE -> Icons.Default.Info
+        GeminiState.IDLE -> Icons.Default.Mic
         GeminiState.LISTENING -> Icons.Default.Mic
-        GeminiState.THINKING -> Icons.Default.Settings // Gear-like
-        GeminiState.WORKING -> Icons.Default.Settings // Gear-like
+        GeminiState.THINKING -> Icons.Default.Settings
+        GeminiState.WORKING -> Icons.Default.Settings
         GeminiState.SPEAKING -> Icons.AutoMirrored.Filled.VolumeUp
     }
 
     val label = when (state) {
+        GeminiState.IDLE -> "TAP TO SPEAK"
+        GeminiState.LISTENING -> "TAP TO STOP"
         GeminiState.WORKING -> if (currentTool.isNotEmpty()) "Using $currentTool..." else "Checking Data..."
         else -> state.label
     }
@@ -248,6 +262,9 @@ fun StateIndicator(state: GeminiState, currentTool: String, onStop: () -> Unit) 
         label = "rotation"
     )
 
+    // Interactive when IDLE or LISTENING
+    val isInteractive = state == GeminiState.IDLE || state == GeminiState.LISTENING
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -260,15 +277,39 @@ fun StateIndicator(state: GeminiState, currentTool: String, onStop: () -> Unit) 
                 .clip(CircleShape)
                 .background(color.copy(alpha = 0.2f))
                 .border(8.dp, color, CircleShape)
+                .then(
+                    if (isInteractive) {
+                        Modifier
+                            .padding(8.dp)
+                            .clip(CircleShape)
+                            .background(color)
+                    } else {
+                        Modifier
+                    }
+                )
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(80.dp)
-                    .rotate(rotation),
-                tint = if (color == Color.White) Color.Black else color
-            )
+            if (isInteractive) {
+                IconButton(
+                    onClick = onPushToTalk,
+                    modifier = Modifier.size(200.dp)
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = if (state == GeminiState.IDLE) "Start Recording" else "Stop Recording",
+                        modifier = Modifier.size(80.dp),
+                        tint = Color.White
+                    )
+                }
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(80.dp)
+                        .rotate(rotation),
+                    tint = color
+                )
+            }
         }
         
         Spacer(modifier = Modifier.height(24.dp))
@@ -277,7 +318,7 @@ fun StateIndicator(state: GeminiState, currentTool: String, onStop: () -> Unit) 
             text = label.uppercase(),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Black,
-            color = if (color == Color.White) Color.DarkGray else color
+            color = color
         )
     }
 }

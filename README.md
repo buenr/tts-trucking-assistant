@@ -31,7 +31,7 @@ Specification
 LLM Model
 gemini-2.5-flash
 Input Format
-Audio (PCM)
+Audio (WAV)
 Context Window
 1,048,576 tokens
 Output Format
