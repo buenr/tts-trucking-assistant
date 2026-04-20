@@ -247,7 +247,7 @@ class GeminiRestClient(
                 add(buildJsonObject {
                     put("type", "function_result")
                     put("name", result.name)
-                    put("call_id", result.ca llId)
+                    put("call_id", result.callId)
                     put("result", result.result)
                 })
             }
