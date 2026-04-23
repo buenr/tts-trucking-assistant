@@ -36,7 +36,8 @@ enum class GeminiState(val label: String) {
     LISTENING("Listening..."),
     THINKING("Thinking..."),
     WORKING("Checking Data..."), // Used during Tool Calls
-    SPEAKING("Speaking...")
+    SPEAKING("Speaking..."),
+    OFFLINE("Offline")
 }
 
 // ============================================
@@ -182,4 +183,10 @@ data class FunctionResult(
     val name: String,
     val result: JsonElement
 )
+
+/**
+ * Thrown when the network is completely unavailable and all retries are exhausted.
+ * The controller should trigger an offline fallback TTS response.
+ */
+class NetworkFailureException(message: String, cause: Throwable? = null) : Exception(message, cause)
 

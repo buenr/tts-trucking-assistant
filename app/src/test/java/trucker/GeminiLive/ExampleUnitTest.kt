@@ -1,4 +1,4 @@
-package trucker.GeminiLive
+package trucker.geminilive
 
 import org.junit.Test
 

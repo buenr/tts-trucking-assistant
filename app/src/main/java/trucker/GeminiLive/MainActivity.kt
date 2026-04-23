@@ -3,23 +3,24 @@ package trucker.geminilive
 import android.Manifest
 import android.app.Activity
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,48 +30,67 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import trucker.geminilive.network.GeminiState
+import trucker.geminilive.controller.AiState
+import trucker.geminilive.startup.StartupReadinessManager
 import trucker.geminilive.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
+
+    private lateinit var viewModel: GeminiViewModel
+
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (!isGranted) {
+            // If permission denied, the app can't function; UI will show a warning
+            android.util.Log.w("MainActivity", "Audio recording permission denied")
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Request audio permission upfront
+        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+
         setContent {
             MyApplicationTheme {
                 KeepScreenOn()
-                val viewModel: GeminiViewModel = viewModel()
-                val uiState = viewModel.uiState.value
+                val vm: GeminiViewModel = viewModel()
+                viewModel = vm
 
-                val permissionLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.RequestPermission()
-                ) { isGranted ->
-                    if (isGranted) {
-                        // Permission granted
-                    }
-                }
+                val readiness by vm.readinessReport.collectAsStateWithLifecycle()
+                val isChecking by vm.isCheckingReadiness.collectAsStateWithLifecycle()
 
-                LaunchedEffect(Unit) {
-                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                }
-
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    CopilotScreen(
-                        uiState = uiState,
-                        logs = viewModel.logs,
-                        onToggle = { viewModel.toggleConnection() },
-                        onPushToTalk = { viewModel.toggleRecording() },
-                        modifier = Modifier.padding(innerPadding)
+                when {
+                    isChecking -> LoadingScreen()
+                    readiness?.isReady == false -> ReadinessScreen(
+                        report = readiness!!,
+                        onRecheck = { vm.checkReadiness() }
                     )
+                    else -> CopilotApp(vm)
                 }
             }
         }
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        // Samsung Galaxy Tab Active 5 Active Key (XCover key) = 1001
+        // Also support common programmable headset/PTT buttons
+        if (keyCode == 1001 || keyCode == KeyEvent.KEYCODE_HEADSETHOOK || keyCode == KeyEvent.KEYCODE_BUTTON_1) {
+            if (::viewModel.isInitialized) {
+                viewModel.onActiveKeyPressed()
+            }
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
     }
 }
 
@@ -87,164 +107,234 @@ fun KeepScreenOn() {
 }
 
 @Composable
-fun CopilotScreen(
-    uiState: GeminiUiState,
-    logs: List<String>,
-    onToggle: () -> Unit,
-    onPushToTalk: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
+fun LoadingScreen() {
+    Box(
+        modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .background(Color.Black),
+        contentAlignment = Alignment.Center
     ) {
-        // Truck AI Logo
-        Image(
-            painter = painterResource(id = R.drawable.ic_launcher_foreground),
-            contentDescription = "Truck AI Logo",
-            modifier = Modifier
-                .size(180.dp)
-                .padding(bottom = 8.dp)
-        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator(color = Color(0xFF00E676), modifier = Modifier.size(64.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                text = "Checking offline voice models...",
+                color = Color.White,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
 
-        // Header
-        Text(
-            text = "Swift Copilot",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 24.dp)
-        )
-
-        // Main Interaction Area
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            contentAlignment = Alignment.Center
+@Composable
+fun ReadinessScreen(
+    report: StartupReadinessManager.ReadinessReport,
+    onRecheck: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF1A1A1A)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier.padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            if (!uiState.isConnected) {
-                Button(
-                    onClick = onToggle,
-                    modifier = Modifier.size(160.dp),
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
+            Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = "Warning",
+                tint = Color(0xFFFF5252),
+                modifier = Modifier.size(96.dp)
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                text = "OFFLINE VOICE MODELS MISSING",
+                color = Color(0xFFFF5252),
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Black,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Connect to terminal Wi-Fi to download the required Google/Samsung voice packs (~150MB).",
+                color = Color.White,
+                fontSize = 20.sp,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+            report.errors.forEach { error ->
+                Surface(
+                    color = Color(0xFF2D2D2D),
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.padding(vertical = 8.dp)
                 ) {
-                    Text("START", fontSize = 28.sp, fontWeight = FontWeight.Black)
-                }
-            } else {
-                StateIndicator(uiState.aiState, uiState.currentTool, onPushToTalk)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Debug Log Console (Re-added for troubleshooting)
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(0.5f),
-            shape = MaterialTheme.shapes.small,
-            color = Color.Black
-        ) {
-            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            LaunchedEffect(logs.size) {
-                if (logs.isNotEmpty()) {
-                    listState.animateScrollToItem(logs.size - 1)
+                    Text(
+                        text = error,
+                        color = Color(0xFFFFB74D),
+                        fontSize = 16.sp,
+                        modifier = Modifier.padding(16.dp),
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
-            androidx.compose.foundation.lazy.LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp)
+            Spacer(modifier = Modifier.height(32.dp))
+            Button(
+                onClick = onRecheck,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676)),
+                modifier = Modifier.fillMaxWidth(0.8f)
             ) {
-                items(
-                    count = logs.size,
-                    itemContent = { index ->
-                        Text(
-                            text = logs[index],
-                            color = Color(0xFF00FF00), // Terminal green
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
-                            lineHeight = 12.sp
-                        )
-                    }
-                )
-            }
-        }
-
-        // Mini status and toggle button at bottom
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = uiState.status,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (uiState.lastError.isNotEmpty()) Color.Red else Color.Gray
-                )
-                if (uiState.userText.isNotEmpty()) {
-                    Text(
-                        text = uiState.userText,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                if (uiState.lastError.isNotEmpty()) {
-                    Text(
-                        text = uiState.lastError,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Red,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-            }
-            if (uiState.isConnected) {
-                TextButton(onClick = onToggle) {
-                    Text("STOP", color = Color.Red, fontWeight = FontWeight.Bold)
-                }
+                Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.Black)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Re-check Readiness", color = Color.Black, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
 
 @Composable
-fun StateIndicator(state: GeminiState, currentTool: String, onPushToTalk: () -> Unit) {
+fun CopilotApp(viewModel: GeminiViewModel) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val partialText by viewModel.partialText.collectAsStateWithLifecycle()
+    val logs by viewModel.logs.collectAsStateWithLifecycle()
+
+    // Developer log toggle (5-tap on the top-left corner)
+    var tapCount by remember { mutableIntStateOf(0) }
+    var showLogs by remember { mutableStateOf(false) }
+    LaunchedEffect(tapCount) {
+        if (tapCount >= 5) {
+            showLogs = !showLogs
+            tapCount = 0
+        }
+    }
+
+    // Background color subtly shifts with state for peripheral visibility
+    val bgColor = when (uiState.aiState) {
+        AiState.IDLE, AiState.LISTENING -> Color(0xFF0A1F0A) // very dark green tint
+        AiState.THINKING -> Color(0xFF1F1F0A) // very dark yellow tint
+        AiState.WORKING, AiState.SPEAKING -> Color(0xFF0A0A1F) // very dark blue tint
+        AiState.OFFLINE -> Color(0xFF1F0A0A) // very dark red tint
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(bgColor)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Hidden tap area for developer logs
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .clickable { tapCount++ }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Large State Indicator
+            StateIndicator(uiState.aiState, uiState.currentTool)
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Partial STT text — lets driver know they're being heard
+            if (partialText.isNotBlank() && uiState.aiState == AiState.LISTENING) {
+                Text(
+                    text = partialText,
+                    color = Color(0xFF81C784),
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                )
+            }
+
+            // User / Gemini text summary
+            if (uiState.userText.isNotBlank()) {
+                Text(
+                    text = "You: ${uiState.userText}",
+                    color = Color.Gray,
+                    fontSize = 16.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
+            if (uiState.geminiText.isNotBlank() && uiState.aiState == AiState.SPEAKING) {
+                Text(
+                    text = "Copilot: ${uiState.geminiText.take(120)}...",
+                    color = Color(0xFF64B5F6),
+                    fontSize = 16.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
+
+            // Error display
+            if (uiState.lastError.isNotBlank()) {
+                Text(
+                    text = uiState.lastError,
+                    color = Color(0xFFFF5252),
+                    fontSize = 16.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Debug log console (hidden by default)
+            if (showLogs) {
+                LogConsole(logs = logs)
+            }
+
+            // Bottom status bar
+            StatusBar(uiState)
+        }
+    }
+}
+
+@Composable
+fun StateIndicator(state: AiState, currentTool: String) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    
+
     val color = when (state) {
-        GeminiState.IDLE -> Color(0xFF4CAF50) // Green - ready to record
-        GeminiState.LISTENING -> Color(0xFFFF5722) // Orange - recording
-        GeminiState.THINKING -> Color(0xFFFFC107) // Amber
-        GeminiState.WORKING -> Color(0xFF2196F3)  // Blue
-        GeminiState.SPEAKING -> Color(0xFF9C27B0) // Purple
+        AiState.IDLE -> Color(0xFF4CAF50)
+        AiState.LISTENING -> Color(0xFF00E676)
+        AiState.THINKING -> Color(0xFFFFC107)
+        AiState.WORKING -> Color(0xFF2196F3)
+        AiState.SPEAKING -> Color(0xFF42A5F5)
+        AiState.OFFLINE -> Color(0xFFF44336)
     }
 
     val icon = when (state) {
-        GeminiState.IDLE -> Icons.Default.Mic
-        GeminiState.LISTENING -> Icons.Default.Mic
-        GeminiState.THINKING -> Icons.Default.Settings
-        GeminiState.WORKING -> Icons.Default.Settings
-        GeminiState.SPEAKING -> Icons.AutoMirrored.Filled.VolumeUp
+        AiState.IDLE, AiState.LISTENING -> Icons.Default.Mic
+        AiState.THINKING -> Icons.Default.Settings
+        AiState.WORKING -> Icons.Default.Settings
+        AiState.SPEAKING -> Icons.AutoMirrored.Filled.VolumeUp
+        AiState.OFFLINE -> Icons.Default.Warning
     }
 
     val label = when (state) {
-        GeminiState.IDLE -> "TAP TO SPEAK"
-        GeminiState.LISTENING -> "TAP TO STOP"
-        GeminiState.WORKING -> if (currentTool.isNotEmpty()) "Using $currentTool..." else "Checking Data..."
-        else -> state.label
+        AiState.IDLE -> "READY"
+        AiState.LISTENING -> "LISTENING..."
+        AiState.THINKING -> "THINKING..."
+        AiState.WORKING -> if (currentTool.isNotEmpty()) currentTool.replace(Regex("([A-Z])"), " $1").uppercase()
+        else "CHECKING DATA..."
+        AiState.SPEAKING -> "SPEAKING..."
+        AiState.OFFLINE -> "OFFLINE"
     }
 
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = if (state == GeminiState.LISTENING || state == GeminiState.SPEAKING) 1.15f else 1f,
+        targetValue = if (state == AiState.LISTENING || state == AiState.SPEAKING) 1.15f else 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(800, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -254,16 +344,13 @@ fun StateIndicator(state: GeminiState, currentTool: String, onPushToTalk: () -> 
 
     val rotation by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = if (state == GeminiState.WORKING || state == GeminiState.THINKING) 360f else 0f,
+        targetValue = if (state == AiState.WORKING || state == AiState.THINKING) 360f else 0f,
         animationSpec = infiniteRepeatable(
             animation = tween(2000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "rotation"
     )
-
-    // Interactive when IDLE or LISTENING
-    val isInteractive = state == GeminiState.IDLE || state == GeminiState.LISTENING
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -272,53 +359,90 @@ fun StateIndicator(state: GeminiState, currentTool: String, onPushToTalk: () -> 
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
-                .size(220.dp)
+                .size(280.dp)
                 .scale(scale)
                 .clip(CircleShape)
-                .background(color.copy(alpha = 0.2f))
-                .border(8.dp, color, CircleShape)
-                .then(
-                    if (isInteractive) {
-                        Modifier
-                            .padding(8.dp)
-                            .clip(CircleShape)
-                            .background(color)
-                    } else {
-                        Modifier
-                    }
-                )
+                .background(color.copy(alpha = 0.15f))
+                .border(12.dp, color, CircleShape)
         ) {
-            if (isInteractive) {
-                IconButton(
-                    onClick = onPushToTalk,
-                    modifier = Modifier.size(200.dp)
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = if (state == GeminiState.IDLE) "Start Recording" else "Stop Recording",
-                        modifier = Modifier.size(80.dp),
-                        tint = Color.White
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(100.dp)
+                    .rotate(rotation),
+                tint = color
+            )
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Text(
+            text = label,
+            style = MaterialTheme.typography.displaySmall,
+            fontWeight = FontWeight.Black,
+            color = color,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+fun StatusBar(uiState: trucker.geminilive.controller.CopilotUiState) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = uiState.status,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (uiState.aiState == AiState.OFFLINE) Color(0xFFFF5252) else Color(0xFF81C784)
+        )
+        if (uiState.currentTool.isNotEmpty()) {
+            Text(
+                text = uiState.currentTool,
+                style = MaterialTheme.typography.labelMedium,
+                color = Color(0xFF64B5F6)
+            )
+        }
+    }
+}
+
+@Composable
+fun LogConsole(logs: List<String>) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(logs.size) {
+        if (logs.isNotEmpty()) {
+            listState.animateScrollToItem(logs.size - 1)
+        }
+    }
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp),
+        shape = MaterialTheme.shapes.small,
+        color = Color.Black
+    ) {
+        androidx.compose.foundation.lazy.LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp)
+        ) {
+            items(
+                count = logs.size,
+                itemContent = { index ->
+                    Text(
+                        text = logs[index],
+                        color = Color(0xFF00FF00),
+                        fontSize = 10.sp,
+                        lineHeight = 12.sp
                     )
                 }
-            } else {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(80.dp)
-                        .rotate(rotation),
-                    tint = color
-                )
-            }
+            )
         }
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        Text(
-            text = label.uppercase(),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Black,
-            color = color
-        )
     }
 }
