@@ -93,11 +93,13 @@ object TruckingTools {
      */
     fun getVertexTools(): List<com.google.genai.types.Tool> {
         val functionDeclarations = declaration.map { func ->
-            com.google.genai.types.FunctionDeclaration.builder()
+            val builder = com.google.genai.types.FunctionDeclaration.builder()
                 .name(func.name)
-                .description(func.description)
-                .parameters(func.parameters?.toSdkSchema())
-                .build()
+            
+            func.description?.let { builder.description(it) }
+            func.parameters?.let { builder.parameters(it.toSdkSchema()) }
+            
+            builder.build()
         }
         return listOf(
             com.google.genai.types.Tool.builder()
@@ -111,8 +113,9 @@ object TruckingTools {
      */
     private fun Schema.toSdkSchema(): com.google.genai.types.Schema {
         val builder = com.google.genai.types.Schema.builder()
-            .type(this.type)
-            .description(this.description)
+        
+        this.type?.let { builder.type(it) }
+        this.description?.let { builder.description(it) }
 
         this.properties?.let { props ->
             val sdkProps = props.mapValues { (_, schema) ->

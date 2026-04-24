@@ -19,5 +19,5 @@ app/src/main/assets/*.json
 # Service account keys - NEVER commit these
 *.json
 !gradle/**/*.json
-app/src/main/assets/vertex-ai-testing1.json
+app/src/main/res/raw/vertex-ai-testing1.json
 *vertex*.json

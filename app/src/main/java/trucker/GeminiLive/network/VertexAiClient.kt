@@ -5,10 +5,12 @@ import android.util.Log
 import com.google.genai.*
 import com.google.genai.types.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.json.*
+import trucker.geminilive.BuildConfig
 import trucker.geminilive.tools.TruckingTools
 import java.util.UUID
 
@@ -22,15 +24,18 @@ class VertexAiClient(private val context: Context) {
 
     private suspend fun getClient(): Client {
         if (client == null) {
-            val projectId = VertexAuth.getProjectId(context)
-            val credentials = VertexAuth.getCredentials(context)
+            // Load credentials and project ID from VertexCredentialsManager
+            val projectId = VertexCredentialsManager.getProjectId(context)
+            val credentials = VertexCredentialsManager.getCredentials(context)
 
             client = Client.builder()
                 .vertexAI(true)
                 .project(projectId)
-                .location(VertexAuth.LOCATION)
+                .location(BuildConfig.VERTEX_AI_LOCATION)
                 .credentials(credentials)
                 .build()
+
+            Log.d(TAG, "Vertex AI client initialized for project: $projectId")
         }
         return client!!
     }
@@ -41,21 +46,21 @@ class VertexAiClient(private val context: Context) {
     suspend fun sendMessage(
         textInput: String,
         history: List<Content> = emptyList()
-    ): GeminiResponse {
-        return try {
+    ): GeminiResponse = withContext(Dispatchers.IO) {
+        try {
             val client = getClient()
             val contents = buildContents(history, textInput)
 
             val response = client.models.generateContent(
-                VertexAuth.MODEL,
+                BuildConfig.VERTEX_AI_MODEL,
                 contents,
                 buildConfig()
             )
 
             parseResponse(response)
         } catch (e: Exception) {
-            Log.e("VertexAiClient", "Error sending message", e)
-            GeminiResponse.Error(e.message ?: "Unknown error")
+            Log.e("VertexAiClient", "Error sending message: ${e.javaClass.simpleName}: ${e.message}", e)
+            GeminiResponse.Error("${e.javaClass.simpleName}: ${e.message ?: "no details"} | cause: ${e.cause?.message ?: "none"}")
         }
     }
 
@@ -66,15 +71,15 @@ class VertexAiClient(private val context: Context) {
         textInput: String,
         history: List<Content> = emptyList(),
         onDelta: (String) -> Unit
-    ): GeminiResponse {
-        return try {
+    ): GeminiResponse = withContext(Dispatchers.IO) {
+        try {
             val client = getClient()
             val contents = buildContents(history, textInput)
 
             val accumulatedText = StringBuilder()
             val functionCalls = mutableListOf<FunctionCallData>()
 
-            val responseStream = client.models.generateContentStream(VertexAuth.MODEL, contents, buildConfig())
+            val responseStream = client.models.generateContentStream(BuildConfig.VERTEX_AI_MODEL, contents, buildConfig())
             for (chunk in responseStream) {
                 val text = chunk.text()
                 if (!text.isNullOrBlank()) {
@@ -105,14 +110,14 @@ class VertexAiClient(private val context: Context) {
                 }
             }
 
-            return if (functionCalls.isNotEmpty()) {
+            if (functionCalls.isNotEmpty()) {
                 GeminiResponse.NeedsFunctionCall(functionCalls, "")
             } else {
                 GeminiResponse.Text(accumulatedText.toString(), "")
             }
         } catch (e: Exception) {
-            Log.e("VertexAiClient", "Error streaming message", e)
-            GeminiResponse.Error(e.message ?: "Unknown streaming error")
+            Log.e("VertexAiClient", "Error streaming message: ${e.javaClass.simpleName}: ${e.message}", e)
+            GeminiResponse.Error("${e.javaClass.simpleName}: ${e.message ?: "no details"} | cause: ${e.cause?.message ?: "none"}")
         }
     }
 
@@ -122,8 +127,8 @@ class VertexAiClient(private val context: Context) {
     suspend fun sendFunctionResults(
         functionResults: List<FunctionResult>,
         history: List<Content> = emptyList()
-    ): GeminiResponse {
-        return try {
+    ): GeminiResponse = withContext(Dispatchers.IO) {
+        try {
             val client = getClient()
 
             // Build contents with function results as tool responses
@@ -149,8 +154,8 @@ class VertexAiClient(private val context: Context) {
 
             parseResponse(response)
         } catch (e: Exception) {
-            Log.e("VertexAiClient", "Error sending function results", e)
-            GeminiResponse.Error(e.message ?: "Unknown error")
+            Log.e("VertexAiClient", "Error sending function results: ${e.javaClass.simpleName}: ${e.message}", e)
+            GeminiResponse.Error("${e.javaClass.simpleName}: ${e.message ?: "no details"} | cause: ${e.cause?.message ?: "none"}")
         }
     }
 
@@ -206,6 +211,7 @@ class VertexAiClient(private val context: Context) {
     }
 
     companion object {
+        private const val TAG = "VertexAiClient"
         private val SYSTEM_INSTRUCTION = """
             # PERSONA
             You are a Knight-Swift Transportation trucking in-cab copilot (AI Assistant) on their tablet. Your responses will be spoken aloud via text-to-speech (TTS) to the driver. Speak in very short, direct sentences. Directly address only the driver's question, don't add much extra information from the tool call result. Use concise, operational language familiar to truck drivers. Always try to keep it simple in your responses.
