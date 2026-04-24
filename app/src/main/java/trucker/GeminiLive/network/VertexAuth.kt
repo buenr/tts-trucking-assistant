@@ -6,11 +6,17 @@ import com.google.auth.oauth2.GoogleCredentials
 import com.google.auth.oauth2.ServiceAccountCredentials
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import trucker.geminilive.BuildConfig
 
 /**
  * Vertex AI authentication helper.
  * Uses Application Default Credentials (ADC) for OAuth2 authentication.
  * Falls back to service account JSON from assets if ADC is not configured.
+ *
+ * Configuration (via local.properties and Secrets Gradle Plugin):
+ * - VERTEX_AI_PROJECT_ID: Google Cloud project ID
+ * - VERTEX_AI_LOCATION: Vertex AI location (default: global)
+ * - VERTEX_AI_MODEL: Model name (default: gemini-2.5-flash)
  *
  * ADC Configuration:
  * - Set GOOGLE_APPLICATION_CREDENTIALS environment variable to point to service account JSON
@@ -20,9 +26,16 @@ object VertexAuth {
     private const val ASSET_NAME = "vertex-ai-testing1.json"
     private const val SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 
-    // Vertex AI configuration
-    const val LOCATION = "global"
-    const val MODEL = "gemini-2.5-flash"
+    // Vertex AI configuration from BuildConfig (populated by Secrets Gradle Plugin)
+    val PROJECT_ID: String
+        get() = BuildConfig.VERTEX_AI_PROJECT_ID.takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("VERTEX_AI_PROJECT_ID not configured in local.properties")
+
+    val LOCATION: String
+        get() = BuildConfig.VERTEX_AI_LOCATION.takeIf { it.isNotBlank() } ?: "global"
+
+    val MODEL: String
+        get() = BuildConfig.VERTEX_AI_MODEL.takeIf { it.isNotBlank() } ?: "gemini-2.5-flash"
 
     /**
      * Get Google Credentials using Application Default Credentials (ADC).
@@ -45,12 +58,19 @@ object VertexAuth {
     }
 
     /**
-     * Get project ID from credentials.
-     * Tries ADC first, then falls back to service account JSON.
+     * Get project ID from BuildConfig or credentials.
+     * Priority: BuildConfig > ADC > Service Account JSON
      */
     fun getProjectId(context: Context): String {
+        // First check if project ID is configured in local.properties
+        val configProjectId = BuildConfig.VERTEX_AI_PROJECT_ID.takeIf { it.isNotBlank() }
+        if (configProjectId != null) {
+            Log.d("VertexAuth", "Using project ID from local.properties: $configProjectId")
+            return configProjectId
+        }
+
+        // Fallback to ADC
         return try {
-            // Try ADC first
             val adcCredentials = GoogleCredentials.getApplicationDefault()
             adcCredentials.projectId ?: throw IllegalStateException("Project ID not found in ADC credentials")
         } catch (e: Exception) {
@@ -62,8 +82,10 @@ object VertexAuth {
                 credentials.projectId ?: throw IllegalStateException("Project ID not found in service account JSON")
             } catch (fallbackException: Exception) {
                 throw IllegalStateException(
-                    "Failed to get project ID from ADC or service account. " +
-                    "Please ensure GOOGLE_APPLICATION_CREDENTIALS is set or $ASSET_NAME is in assets.",
+                    "Failed to get project ID. " +
+                    "Please set VERTEX_AI_PROJECT_ID in local.properties, " +
+                    "or ensure GOOGLE_APPLICATION_CREDENTIALS is set, " +
+                    "or place $ASSET_NAME in assets.",
                     fallbackException
                 )
             }

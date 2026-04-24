@@ -3,10 +3,13 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.secrets.gradle.plugin)
 }
 
-// Note: Vertex AI uses service account JSON key from assets, not API key
-// Add vertex-ai-testing1.json to app/src/main/assets/
+// Note: Configure secrets in local.properties:
+// VERTEX_AI_PROJECT_ID=your-project-id
+// VERTEX_AI_LOCATION=global
+// VERTEX_AI_MODEL=gemini-2.5-flash
 
 android {
     namespace = "trucker.geminilive"
@@ -41,6 +44,18 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    secrets {
+        propertiesFileName = "local.properties"
+        defaultConfig {
+            // Required secrets - app will fail to build if not present
+            string("VERTEX_AI_PROJECT_ID", "")
+            string("VERTEX_AI_LOCATION", "global")
+            string("VERTEX_AI_MODEL", "gemini-2.5-flash")
+            // Optional: Service account JSON content (for embedded auth)
+            string("VERTEX_AI_SERVICE_ACCOUNT_JSON", "")
+        }
     }
 
     packaging {

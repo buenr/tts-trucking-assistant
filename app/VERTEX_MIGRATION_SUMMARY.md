@@ -9,13 +9,13 @@ Successfully migrated the TTS Trucking Assistant app from Gemini Interactions AP
 - **Added**: `com.google.genai:google-genai:0.3.0` (Gen AI SDK for Java)
 - **Removed**: Direct OkHttp REST client usage for Gemini Interactions API
 
-### 2. Authentication
+### 2. Authentication & Configuration
 - **Before**: API key via `secrets.properties` → `BuildConfig.GEMINI_API_KEY`
-- **After**: Application Default Credentials (ADC) with automatic fallback to service account JSON
-- **Method 1 (ADC)**: Set `GOOGLE_APPLICATION_CREDENTIALS` environment variable to service account JSON path
-- **Method 2 (Assets)**: Place `vertex-ai-testing1.json` in `app/src/main/assets/`
-- **Location**: `global` (automatic routing to available regions)
-- **Model**: `gemini-2.5-flash`
+- **After**: Secrets Gradle Plugin + Application Default Credentials (ADC)
+- **Configuration**: Project ID, location, and model configured via `local.properties`
+- **Plugin**: `com.google.android.libraries.mapsplatform.secrets-gradle-plugin:2.0.1`
+- **BuildConfig Fields**: `VERTEX_AI_PROJECT_ID`, `VERTEX_AI_LOCATION`, `VERTEX_AI_MODEL`
+- **Authentication**: ADC with fallback to service account JSON in assets
 
 ### 3. API Client Architecture
 - **Before**: `GeminiRestClient` using OkHttp + Interactions API (`/interactions` endpoint)
@@ -31,9 +31,9 @@ Successfully migrated the TTS Trucking Assistant app from Gemini Interactions AP
 
 | File | Changes |
 |------|---------|
-| `gradle/libs.versions.toml` | Added `googleGenai = "0.3.0"` and library reference |
-| `app/build.gradle.kts` | Added Gen AI SDK dependency, removed API key handling |
-| `network/VertexAuth.kt` | Complete rewrite for service account auth |
+| `gradle/libs.versions.toml` | Added `googleGenai` and `secretsGradlePlugin` libraries |
+| `app/build.gradle.kts` | Added Gen AI SDK and Secrets Gradle Plugin configuration |
+| `network/VertexAuth.kt` | Uses BuildConfig secrets for project/location/model config |
 | `network/VertexAiClient.kt` | **NEW** - Replaces GeminiRestClient |
 | `network/GeminiModels.kt` | Removed Interactions API models, kept shared tool types |
 | `network/GeminiRestClient.kt` | **DELETED** |
@@ -44,19 +44,37 @@ Successfully migrated the TTS Trucking Assistant app from Gemini Interactions AP
 
 ## Setup Instructions
 
-### Option 1: Application Default Credentials (ADC) - Recommended
+### Step 1: Configure Secrets (Required)
+
+1. **Copy the template file**:
+   ```bash
+   cp local.properties.template local.properties
+   ```
+
+2. **Edit `local.properties`** with your values:
+   ```properties
+   VERTEX_AI_PROJECT_ID=your-actual-project-id
+   VERTEX_AI_LOCATION=global
+   VERTEX_AI_MODEL=gemini-2.5-flash
+   ```
+
+3. **Get your Project ID** from Google Cloud Console:
+   - Navigate to: https://console.cloud.google.com/
+   - Copy the Project ID from the project selector dropdown
+
+### Step 2: Configure Authentication (Choose One)
+
+#### Option A: Application Default Credentials (ADC) - Recommended
 
 1. **Download service account JSON** from Google Cloud Console:
-   - Navigate to: APIs & Services > Credentials > Service Accounts
-   - Create or select existing service account
-   - Generate JSON key
+   - APIs & Services > Credentials > Service Accounts > Create key
 
 2. **Set environment variable**:
    ```bash
    export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
    ```
 
-### Option 2: Service Account in Assets (Fallback)
+#### Option B: Service Account in Assets (Fallback)
 
 1. **Download service account JSON** from Google Cloud Console
 2. **Rename to `vertex-ai-testing1.json`**
@@ -69,7 +87,7 @@ Successfully migrated the TTS Trucking Assistant app from Gemini Interactions AP
    app/src/main/assets/vertex-ai-testing1.json
    ```
 
-### Required Permissions
+### Step 3: Required Permissions
 
 - **Enable Vertex AI API** in your Google Cloud project
 - **Ensure service account has permissions**:
