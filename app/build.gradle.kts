@@ -49,11 +49,13 @@ android {
     secrets {
         propertiesFileName = "local.properties"
         defaultConfig {
-            // Required secrets - app will fail to build if not present
+            // Required: Google Cloud Project ID
             string("VERTEX_AI_PROJECT_ID", "")
+            // Optional: Vertex AI location (default: global)
             string("VERTEX_AI_LOCATION", "global")
+            // Optional: Gemini model (default: gemini-2.5-flash)
             string("VERTEX_AI_MODEL", "gemini-2.5-flash")
-            // Optional: Service account JSON content (for embedded auth)
+            // Required: Service account JSON content for authentication
             string("VERTEX_AI_SERVICE_ACCOUNT_JSON", "")
         }
     }

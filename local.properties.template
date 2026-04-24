@@ -14,15 +14,18 @@ VERTEX_AI_LOCATION=global
 # Options: gemini-2.5-flash, gemini-2.5-pro, gemini-2.0-flash, etc.
 VERTEX_AI_MODEL=gemini-2.5-flash
 
-# Alternative Authentication Methods (choose one):
-
-# Method 1: Application Default Credentials (ADC) - RECOMMENDED for development
-# Set the GOOGLE_APPLICATION_CREDENTIALS environment variable to point to your service account JSON:
-# export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
-
-# Method 2: Service account JSON in assets (fallback)
-# Place your service account JSON file at:
-# app/src/main/assets/vertex-ai-testing1.json
-
-# Method 3: Embed service account JSON (not recommended for production)
-# VERTEX_AI_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
+# Required: Service Account JSON for authentication
+# Download from Google Cloud Console: APIs & Services > Credentials > Service Accounts > Create Key
+# The entire JSON content goes here (minified to one line or use \ line continuation)
+#
+# Example (minified - replace with your actual JSON):
+# VERTEX_AI_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"your-project","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n","client_email":"...","client_id":"...","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_x509_cert_url":"..."}
+#
+# Or use line continuation for readability:
+# VERTEX_AI_SERVICE_ACCOUNT_JSON=\
+# {\
+#   "type": "service_account",\
+#   "project_id": "your-project",\
+#   ...\
+# }
+VERTEX_AI_SERVICE_ACCOUNT_JSON=

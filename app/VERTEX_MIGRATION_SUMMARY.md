@@ -11,11 +11,11 @@ Successfully migrated the TTS Trucking Assistant app from Gemini Interactions AP
 
 ### 2. Authentication & Configuration
 - **Before**: API key via `secrets.properties` → `BuildConfig.GEMINI_API_KEY`
-- **After**: Secrets Gradle Plugin + Application Default Credentials (ADC)
-- **Configuration**: Project ID, location, and model configured via `local.properties`
+- **After**: Secrets Gradle Plugin with service account JSON
+- **Configuration**: Project ID, location, model, and service account JSON via `local.properties`
 - **Plugin**: `com.google.android.libraries.mapsplatform.secrets-gradle-plugin:2.0.1`
-- **BuildConfig Fields**: `VERTEX_AI_PROJECT_ID`, `VERTEX_AI_LOCATION`, `VERTEX_AI_MODEL`
-- **Authentication**: ADC with fallback to service account JSON in assets
+- **BuildConfig Fields**: `VERTEX_AI_PROJECT_ID`, `VERTEX_AI_LOCATION`, `VERTEX_AI_MODEL`, `VERTEX_AI_SERVICE_ACCOUNT_JSON`
+- **Authentication**: Service account JSON loaded from secrets at runtime
 
 ### 3. API Client Architecture
 - **Before**: `GeminiRestClient` using OkHttp + Interactions API (`/interactions` endpoint)
@@ -33,7 +33,7 @@ Successfully migrated the TTS Trucking Assistant app from Gemini Interactions AP
 |------|---------|
 | `gradle/libs.versions.toml` | Added `googleGenai` and `secretsGradlePlugin` libraries |
 | `app/build.gradle.kts` | Added Gen AI SDK and Secrets Gradle Plugin configuration |
-| `network/VertexAuth.kt` | Uses BuildConfig secrets for project/location/model config |
+| `network/VertexAuth.kt` | Uses BuildConfig secrets for all config and service account auth |
 | `network/VertexAiClient.kt` | **NEW** - Replaces GeminiRestClient |
 | `network/GeminiModels.kt` | Removed Interactions API models, kept shared tool types |
 | `network/GeminiRestClient.kt` | **DELETED** |
@@ -51,43 +51,26 @@ Successfully migrated the TTS Trucking Assistant app from Gemini Interactions AP
    cp local.properties.template local.properties
    ```
 
-2. **Edit `local.properties`** with your values:
+2. **Get your Project ID** from Google Cloud Console:
+   - Navigate to: https://console.cloud.google.com/
+   - Copy the Project ID from the project selector dropdown
+
+3. **Download service account JSON**:
+   - APIs & Services > Credentials > Service Accounts
+   - Create or select existing service account
+   - Generate JSON key
+
+4. **Edit `local.properties`** with your values:
    ```properties
    VERTEX_AI_PROJECT_ID=your-actual-project-id
    VERTEX_AI_LOCATION=global
    VERTEX_AI_MODEL=gemini-2.5-flash
+   VERTEX_AI_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"your-project",...}
    ```
 
-3. **Get your Project ID** from Google Cloud Console:
-   - Navigate to: https://console.cloud.google.com/
-   - Copy the Project ID from the project selector dropdown
+   > **Note**: The service account JSON should be minified to a single line. You can use a JSON minifier tool or manually remove line breaks.
 
-### Step 2: Configure Authentication (Choose One)
-
-#### Option A: Application Default Credentials (ADC) - Recommended
-
-1. **Download service account JSON** from Google Cloud Console:
-   - APIs & Services > Credentials > Service Accounts > Create key
-
-2. **Set environment variable**:
-   ```bash
-   export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
-   ```
-
-#### Option B: Service Account in Assets (Fallback)
-
-1. **Download service account JSON** from Google Cloud Console
-2. **Rename to `vertex-ai-testing1.json`**
-3. **Place file in assets**:
-   ```
-   app/src/main/assets/vertex-ai-testing1.json
-   ```
-4. **Add to `.gitignore`**:
-   ```
-   app/src/main/assets/vertex-ai-testing1.json
-   ```
-
-### Step 3: Required Permissions
+### Step 2: Required Permissions
 
 - **Enable Vertex AI API** in your Google Cloud project
 - **Ensure service account has permissions**:
@@ -144,7 +127,7 @@ client.models.generateContent(
 ## Notes
 
 - The app now requires Google Cloud project with Vertex AI enabled
-- **ADC (Application Default Credentials)** is the recommended approach for production
-- ADC is automatically detected - no code changes needed when using environment variables
+- Service account JSON is embedded in the app via BuildConfig at build time
 - Service account JSON should be kept secure and NOT committed to version control
-- The app will automatically fall back to assets if ADC is not configured
+- Add `local.properties` to `.gitignore` to prevent accidental commits
+- The service account JSON is parsed at runtime from BuildConfig.VERTEX_AI_SERVICE_ACCOUNT_JSON

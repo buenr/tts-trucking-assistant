@@ -61,13 +61,13 @@ class StartupReadinessManager(private val context: Context) {
             Log.w("StartupReadiness", "Google TTS engine not installed")
         }
 
-        // 4. Check Vertex AI credentials are configured (ADC or service account in assets)
+        // 4. Check Vertex AI service account is configured in secrets
         val vertexAiConfigured = VertexAuth.hasCredentials(context)
         if (!vertexAiConfigured) {
-            errors.add("Vertex AI credentials not configured. Set GOOGLE_APPLICATION_CREDENTIALS environment variable or add vertex-ai-testing1.json to assets.")
-            Log.w("StartupReadiness", "Vertex AI credentials not found (ADC or service account)")
+            errors.add("Vertex AI service account not configured. Please set VERTEX_AI_PROJECT_ID and VERTEX_AI_SERVICE_ACCOUNT_JSON in local.properties.")
+            Log.w("StartupReadiness", "Vertex AI service account not found in secrets")
         } else {
-            Log.d("StartupReadiness", "Vertex AI credentials configured")
+            Log.d("StartupReadiness", "Vertex AI service account configured")
         }
 
         val isReady = sttAvailable && ttsOfflineVoiceAvailable && googleTtsInstalled && vertexAiConfigured
