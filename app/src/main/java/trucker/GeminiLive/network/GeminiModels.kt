@@ -32,12 +32,9 @@ data class Schema(
 // ============================================
 
 enum class GeminiState(val label: String) {
-    IDLE("Ready"),
     LISTENING("Listening..."),
-    THINKING("Thinking..."),
-    WORKING("Checking Data..."), // Used during Tool Calls
-    SPEAKING("Speaking..."),
-    OFFLINE("Offline")
+    CHECKING_DATA("Checking Data..."), // Includes Thinking + Tool Calls
+    SPEAKING("Speaking...")
 }
 
 // ============================================
@@ -123,7 +120,9 @@ data class TextPart(
 data class InteractionGenerationConfig(
     val temperature: Double? = null,
     @SerialName("max_output_tokens")
-    val maxOutputTokens: Int? = null
+    val maxOutputTokens: Int? = null,
+    @SerialName("thinking_level")
+    val thinkingLevel: String? = null
 )
 
 /**

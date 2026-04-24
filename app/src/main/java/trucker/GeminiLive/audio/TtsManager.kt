@@ -18,6 +18,7 @@ class TtsManager(context: Context) {
     private var onSpeakComplete: (() -> Unit)? = null
     private val pendingSentences = ConcurrentLinkedQueue<String>()
     private var isSpeaking = false
+    private var currentSessionId: String? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     // Offline voice enforcement
@@ -62,8 +63,8 @@ class TtsManager(context: Context) {
                 }
 
                 tts?.language = Locale.US
-                tts?.setSpeechRate(1.0f)
-                tts?.setPitch(1.0f)
+                tts?.setSpeechRate(0.8f)
+                tts?.setPitch(0.9f)
 
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     @Deprecated("Deprecated in Java")
@@ -104,8 +105,11 @@ class TtsManager(context: Context) {
     /**
      * Queue a complete utterance (non-streaming). Used for fallback / error messages.
      */
-    fun speak(text: String) {
+    fun speak(text: String, sessionId: String? = null) {
         if (text.isBlank()) return
+        if (sessionId != null) {
+            currentSessionId = sessionId
+        }
         pendingSentences.add(text.trim())
         if (!isSpeaking) {
             processNextSentence()
@@ -116,8 +120,11 @@ class TtsManager(context: Context) {
      * Feed streaming text deltas. Buffers text and flushes complete sentences.
      * This allows the tablet to speak before the LLM finishes generating.
      */
-    fun streamText(delta: String) {
+    fun streamText(delta: String, sessionId: String? = null) {
         if (delta.isBlank()) return
+        if (sessionId != null) {
+            currentSessionId = sessionId
+        }
 
         synchronized(streamBuffer) {
             streamBuffer.append(delta)
@@ -147,7 +154,10 @@ class TtsManager(context: Context) {
     /**
      * Flush any remaining buffered text as a final sentence.
      */
-    fun flushStreamBuffer() {
+    fun flushStreamBuffer(sessionId: String? = null) {
+        if (sessionId != null) {
+            currentSessionId = sessionId
+        }
         synchronized(streamBuffer) {
             if (streamBuffer.isNotBlank()) {
                 val chunk = streamBuffer.toString().trim()
@@ -171,6 +181,7 @@ class TtsManager(context: Context) {
         val sentence = pendingSentences.poll()
         if (sentence == null) {
             isSpeaking = false
+            currentSessionId = null
             onSpeakComplete?.invoke()
             return
         }
@@ -194,6 +205,7 @@ class TtsManager(context: Context) {
     fun stop() {
         tts?.stop()
         isSpeaking = false
+        currentSessionId = null
         pendingSentences.clear()
         synchronized(streamBuffer) {
             streamBuffer.clear()

@@ -66,6 +66,13 @@ class MainActivity : ComponentActivity() {
                 val vm: GeminiViewModel = viewModel()
                 viewModel = vm
 
+                // Set up close app callback
+                LaunchedEffect(Unit) {
+                    vm.setCloseAppCallback {
+                        closeApp()
+                    }
+                }
+
                 val readiness by vm.readinessReport.collectAsStateWithLifecycle()
                 val isChecking by vm.isCheckingReadiness.collectAsStateWithLifecycle()
 
@@ -91,6 +98,10 @@ class MainActivity : ComponentActivity() {
             return true
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    fun closeApp() {
+        finishAffinity()
     }
 }
 
@@ -211,10 +222,9 @@ fun CopilotApp(viewModel: GeminiViewModel) {
 
     // Background color subtly shifts with state for peripheral visibility
     val bgColor = when (uiState.aiState) {
-        AiState.IDLE, AiState.LISTENING -> Color(0xFF0A1F0A) // very dark green tint
-        AiState.THINKING -> Color(0xFF1F1F0A) // very dark yellow tint
-        AiState.WORKING, AiState.SPEAKING -> Color(0xFF0A0A1F) // very dark blue tint
-        AiState.OFFLINE -> Color(0xFF1F0A0A) // very dark red tint
+        AiState.LISTENING -> Color(0xFF0A1F0A) // very dark green tint
+        AiState.CHECKING_DATA -> Color(0xFF1F1F0A) // very dark yellow tint
+        AiState.SPEAKING -> Color(0xFF0A0A1F) // very dark blue tint
     }
 
     Box(
@@ -306,30 +316,22 @@ fun StateIndicator(state: AiState, currentTool: String) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
 
     val color = when (state) {
-        AiState.IDLE -> Color(0xFF4CAF50)
         AiState.LISTENING -> Color(0xFF00E676)
-        AiState.THINKING -> Color(0xFFFFC107)
-        AiState.WORKING -> Color(0xFF2196F3)
+        AiState.CHECKING_DATA -> Color(0xFFFFC107)
         AiState.SPEAKING -> Color(0xFF42A5F5)
-        AiState.OFFLINE -> Color(0xFFF44336)
     }
 
     val icon = when (state) {
-        AiState.IDLE, AiState.LISTENING -> Icons.Default.Mic
-        AiState.THINKING -> Icons.Default.Settings
-        AiState.WORKING -> Icons.Default.Settings
+        AiState.LISTENING -> Icons.Default.Mic
+        AiState.CHECKING_DATA -> Icons.Default.Settings
         AiState.SPEAKING -> Icons.AutoMirrored.Filled.VolumeUp
-        AiState.OFFLINE -> Icons.Default.Warning
     }
 
     val label = when (state) {
-        AiState.IDLE -> "READY"
         AiState.LISTENING -> "LISTENING..."
-        AiState.THINKING -> "THINKING..."
-        AiState.WORKING -> if (currentTool.isNotEmpty()) currentTool.replace(Regex("([A-Z])"), " $1").uppercase()
+        AiState.CHECKING_DATA -> if (currentTool.isNotEmpty()) currentTool.replace(Regex("([A-Z])"), " $1").uppercase()
         else "CHECKING DATA..."
         AiState.SPEAKING -> "SPEAKING..."
-        AiState.OFFLINE -> "OFFLINE"
     }
 
     val scale by infiniteTransition.animateFloat(
@@ -344,7 +346,7 @@ fun StateIndicator(state: AiState, currentTool: String) {
 
     val rotation by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = if (state == AiState.WORKING || state == AiState.THINKING) 360f else 0f,
+        targetValue = if (state == AiState.CHECKING_DATA) 360f else 0f,
         animationSpec = infiniteRepeatable(
             animation = tween(2000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
@@ -399,7 +401,7 @@ fun StatusBar(uiState: trucker.geminilive.controller.CopilotUiState) {
         Text(
             text = uiState.status,
             style = MaterialTheme.typography.labelLarge,
-            color = if (uiState.aiState == AiState.OFFLINE) Color(0xFFFF5252) else Color(0xFF81C784)
+            color = Color(0xFF81C784)
         )
         if (uiState.currentTool.isNotEmpty()) {
             Text(

@@ -10,115 +10,77 @@ object TruckingTools {
 
     val declaration = listOf(
             FunctionDeclaration(
-                name = "getDriverProfile",
-                description = "Returns deterministic driver profile, current location, tractor/trailer equipment snapshot, and compliance posture from pre-authenticated session context. Invocation condition: call when the driver asks who they are, where they are, what equipment they have, or their high-level compliance status.",
+                name = "getDriverDashboard",
+                description = "Returns comprehensive driver dashboard including profile info, HOS status, safety score, MPG/equipment performance metrics, and medical card renewal reminders.",
                 parameters = Schema(
                     type = "OBJECT",
                     properties = emptyMap()
                 )
             ),
             FunctionDeclaration(
-                name = "getLoadStatus",
-                description = "Returns deterministic active-load progress including stop timeline, each stop status, and load-specific risks or blockers from pre-authenticated session context. Invocation condition: call when the driver asks about load status, stop ETAs, detention risk, or appointment timing.",
-                parameters = Schema(
-                    type = "OBJECT",
-                    properties = emptyMap()
-                )
-            ),
-            FunctionDeclaration(
-                name = "getHoursOfServiceClocks",
-                description = "Returns deterministic Hours of Service (HOS) clock status and deadlines from pre-authenticated session context. Invocation condition: call when the driver asks about their available drive time, duty time, cycle time, or next required break.",
-                parameters = Schema(
-                    type = "OBJECT",
-                    properties = emptyMap()
-                )
-            ),
-            FunctionDeclaration(
-                name = "getTrafficAndWeather",
-                description = "Returns deterministic traffic and weather intelligence for the next 1 hour of the current route. Invocation condition: call when the driver asks about immediate road conditions, weather, or traffic ahead.",
-                parameters = Schema(
-                    type = "OBJECT",
-                    properties = emptyMap()
-                )
-            ),
-            FunctionDeclaration(
-                name = "getDispatchInbox",
-                description = "Returns deterministic dispatch inbox messages and open exceptions requiring driver action from pre-authenticated session context. Invocation condition: call when the driver asks about new dispatch instructions, unresolved issues, or messages needing acknowledgment.",
+                name = "getLoadInformation",
+                description = "Returns load details based on type. Use 'current' for active load with stops and ETAs, or 'next' for pre-dispatch information.",
                 parameters = Schema(
                     type = "OBJECT",
                     properties = mapOf(
-                        "unreadOnly" to Schema(type = "BOOLEAN", description = "If true, return only unread dispatch items")
+                        "loadType" to Schema(type = "STRING", description = "Type of load: 'current' or 'next'")
                     ),
-                    required = listOf("unreadOnly")
+                    required = listOf("loadType")
                 )
             ),
             FunctionDeclaration(
-                name = "getCompanyFAQs",
-                description = "Returns Swift Transportation FAQs bundles by category (Pet/Rider Policy, Macros, Running Late Procedure, Breakdown Protocol, Headset Recommendations, etc). Invocation condition: call when the driver asks company-policy/procedure questions not specific to a single load state.",
+                name = "getFinancials",
+                description = "Returns financial information based on period. Use 'current' for recent paycheck, 'ytd' for year-to-date totals, or 'bonus' for safety bonus program details.",
+                parameters = Schema(
+                    type = "OBJECT",
+                    properties = mapOf(
+                        "period" to Schema(type = "STRING", description = "Period: 'current', 'ytd', or 'bonus'")
+                    ),
+                    required = listOf("period")
+                )
+            ),
+            FunctionDeclaration(
+                name = "getRouteConditions",
+                description = "Returns route planning information including traffic/weather conditions for the next hour and recommended fuel stops with amenities.",
                 parameters = Schema(
                     type = "OBJECT",
                     properties = emptyMap()
                 )
             ),
             FunctionDeclaration(
-                name = "getPaycheckInfo",
-                description = "Returns deterministic paycheck summary with associated miles metrics for the authenticated driver context. Invocation condition: call when the driver asks about pay, settlement amounts, CPM, gross/net totals, reimbursement, or miles tied to pay.",
+                name = "getCommunications",
+                description = "Returns communication information. Use 'messages' for dispatch inbox or 'contacts' for support department phone numbers.",
+                parameters = Schema(
+                    type = "OBJECT",
+                    properties = mapOf(
+                        "type" to Schema(type = "STRING", description = "Type: 'messages' or 'contacts'"),
+                        "unreadOnly" to Schema(type = "BOOLEAN", description = "For messages only: if true, return only unread items")
+                    ),
+                    required = listOf("type")
+                )
+            ),
+            FunctionDeclaration(
+                name = "getCompanyResources",
+                description = "Returns company information based on category. Use 'policies' for FAQs, 'mentor' for mentor program, 'ownerOperator' for lease program, or 'training' for modules.",
+                parameters = Schema(
+                    type = "OBJECT",
+                    properties = mapOf(
+                        "category" to Schema(type = "STRING", description = "Category: 'policies', 'mentor', 'ownerOperator', or 'training'")
+                    ),
+                    required = listOf("category")
+                )
+            ),
+            FunctionDeclaration(
+                name = "getComplianceStatus",
+                description = "Returns compliance-focused information including HOS alerts, medical card status, DVIR requirements, and inspection scheduling.",
                 parameters = Schema(
                     type = "OBJECT",
                     properties = emptyMap()
                 )
             ),
             FunctionDeclaration(
-                name = "findNearestSwiftTerminal",
-                description = "Returns the nearest Swift Transportation terminal or drop yard, including distance and available amenities (showers, shop, wash, parking). Invocation condition: call when the driver asks about where to park, get a truck wash, or find terminal amenities.",
-                parameters = Schema(
-                    type = "OBJECT",
-                    properties = emptyMap()
-                )
-            ),
-            FunctionDeclaration(
-                name = "checkSafetyScore",
-                description = "Returns the driver's current safety score, ranking, and recent telemetry events (e.g., hard braking, overspeeding). Invocation condition: call when the driver asks about their driving score, safety record, or bonus standing.",
-                parameters = Schema(
-                    type = "OBJECT",
-                    properties = emptyMap()
-                )
-            ),
-            FunctionDeclaration(
-                name = "getFuelNetworkRouting",
-                description = "Returns the next approved in-network fuel stop (e.g., Swift Fuel Network, Pilot/Flying J) based on current location and route. Invocation condition: call when the driver asks where they should get fuel next.",
-                parameters = Schema(
-                    type = "OBJECT",
-                    properties = emptyMap()
-                )
-            ),
-            FunctionDeclaration(
-                name = "getContacts",
-                description = "Returns contact information for Swift Transportation departments, Driver/Fleet Leaders, and support services. Invocation condition: call when the driver asks for phone numbers, how to reach dispatch, payroll, safety, breakdown, or their leader.",
-                parameters = Schema(
-                    type = "OBJECT",
-                    properties = emptyMap()
-                )
-            ),
-            FunctionDeclaration(
-                name = "getNextLoadDetails",
-                description = "Returns deterministic details for the next scheduled load (pre-dispatch) including pickup/delivery windows and estimated miles from pre-authenticated session context. Invocation condition: call when the driver asks about their next load, what they are doing after the current load, or for details on a pending dispatch.",
-                parameters = Schema(
-                    type = "OBJECT",
-                    properties = emptyMap()
-                )
-            ),
-            FunctionDeclaration(
-                name = "getMentorFAQs",
-                description = "Returns details about how to become a driver mentor, benefits of mentoring, and requirements. Invocation condition: call when the driver asks about becoming a mentor, training new drivers, or mentor pay.",
-                parameters = Schema(
-                    type = "OBJECT",
-                    properties = emptyMap()
-                )
-            ),
-            FunctionDeclaration(
-                name = "getOwnerOperatorFAQs",
-                description = "Returns details about becoming an owner-operator at Swift, including lease options, pay structure (percentage-based), and equipment perks. Invocation condition: call when the driver asks about owning their own truck, leasing, or becoming their own boss.",
+                name = "closeApp",
+                description = "Closes the application. Use when the driver explicitly requests to close, exit, or quit the app.",
                 parameters = Schema(
                     type = "OBJECT",
                     properties = emptyMap()
@@ -128,7 +90,7 @@ object TruckingTools {
 
     fun handleToolCall(name: String, args: Map<String, JsonElement>?): JsonElement {
         return when (name) {
-            "getDriverProfile" -> {
+            "getDriverDashboard" -> {
                 buildJsonObject {
                     put("driver_id", DEMO_DRIVER_ID)
                     put("profile", buildJsonObject {
@@ -150,94 +112,208 @@ object TruckingTools {
                         put("reefer_enabled", false)
                         put("eld_provider", "Samsara")
                     })
-                    put("compliance", buildJsonObject {
-                        put("hos_cycle_hours_remaining", 18.75)
-                        put("drive_hours_remaining", 5.25)
-                        put("next_30m_break_due_by", "2026-04-15T17:05")
-                        put("med_card_expires_on", "2026-12-14")
-                        put("dvir_status", "submitted_today")
-                    })
-                }
-            }
-            "getLoadStatus" -> {
-                buildJsonObject {
-                    put("driver_id", DEMO_DRIVER_ID)
-                    put("load_id", DEMO_ACTIVE_LOAD_ID)
-                    put("status", "in_transit")
-                    put("priority", "high")
-                    put("customer", buildJsonObject {
-                        put("name", "Walmart DC #213")
-                        put("swift_csr_phone", "800-800-2200")
-                    })
-                    put("origin", "Reno, NV")
-                    put("destination", "Dallas, TX")
-                    put("next_stop_eta", "2026-04-15T19:40")
-                    put("stops", buildJsonArray {
-                        add(buildJsonObject {
-                            put("stop_index", 1)
-                            put("type", "pickup")
-                            put("facility", "Silver State Distribution")
-                            put("city", "Reno, NV")
-                            put("appointment", "2026-04-14T09:00")
-                            put("arrival_time", "2026-04-14T08:45")
-                            put("status", "completed")
-                        })
-                        add(buildJsonObject {
-                            put("stop_index", 2)
-                            put("type", "fuel")
-                            put("facility", "Swift Fuel Network #AZ-17")
-                            put("city", "Flagstaff, AZ")
-                            put("appointment", "2026-04-15T19:30")
-                            put("arrival", "2026-04-15T19:40")
-                            put("status", "in_progress")
-                            put("risk", "minor_delay_10m")
-                        })
-                        add(buildJsonObject {
-                            put("stop_index", 3)
-                            put("type", "delivery")
-                            put("facility", "DFW Retail Crossdock")
-                            put("city", "Dallas, TX")
-                            put("appointment", "2026-04-16T13:00")
-                            put("status", "pending")
-                            put("risk", "tight_eta_due_to_i40_winds")
-                        })
-                    })
-                    put("route_risks", buildJsonArray {
-                        add(buildJsonObject {
-                            put("segment", "I-40 EB mm 167-210")
-                            put("risk_type", "crosswind")
-                            put("severity", "medium")
-                            put("confidence", 0.86)
-                        })
-                        add(buildJsonObject {
-                            put("segment", "US-287 Southbound")
-                            put("risk_type", "construction")
-                            put("severity", "low")
-                            put("confidence", 0.78)
-                        })
-                    })
-                }
-            }
-            "getHoursOfServiceClocks" -> {
-                buildJsonObject {
-                    put("driver_id", DEMO_DRIVER_ID)
-                    put("clocks", buildJsonObject {
-                        put("drive_time_remaining", "5h 15m")
+                    put("hos_status", buildJsonObject {
+                        put("drive_hours_remaining", "5h 15m")
                         put("duty_time_remaining", "8h 45m")
-                        put("cycle_time_remaining", "18h 45m")
+                        put("cycle_hours_remaining", "18h 45m")
                         put("next_break_due_in", "2h 30m")
+                        put("next_30m_break_due_by", "2026-04-15T17:05")
                     })
-                    put("alerts", buildJsonArray {
-                        add(buildJsonObject {
-                            put("category", "HOS")
-                            put("severity", "warning")
-                            put("message", "11-hour drive limit projected in 5h 15m.")
-                            put("due_by", "2026-04-15T20:05")
+                    put("safety_score", buildJsonObject {
+                        put("current_score", 945)
+                        put("status", "Green / Bonus Eligible")
+                        put("company_percentile", "Top 15%")
+                        put("recent_events", buildJsonArray {
+                            add(buildJsonObject {
+                                put("event_type", "Hard Braking")
+                                put("date", "2026-04-14")
+                                put("location", "I-40 near Kingman, AZ")
+                                put("severity", "Moderate")
+                                put("impact_on_score", "-3 pts")
+                            })
                         })
                     })
+                    put("mpg_performance", buildJsonObject {
+                        put("period", "4-week rolling average")
+                        put("current_metrics", buildJsonObject {
+                            put("mpg", 7.2)
+                            put("idle_time_percentage", 12.5)
+                            put("cruise_control_usage", 68.0)
+                        })
+                        put("peer_comparison", buildJsonObject {
+                            put("fleet_average_mpg", 6.8)
+                            put("fleet_percentile_mpg", "75th")
+                            put("fuel_savings_vs_fleet", "$42.50 per week")
+                        })
+                    })
+                    put("medical_card_renewal", buildJsonObject {
+                        put("expires_on", "2026-12-14")
+                        put("days_until_expiry", 243)
+                        put("reminder_scheduled", true)
+                        put("next_reminder_date", "2026-09-15")
+                        put("renewal_window_opens", "2026-10-14")
+                        put("preferred_clinics", buildJsonArray {
+                            add("Concentra - Phoenix")
+                            add("Urgent Care Plus - Flagstaff")
+                            add("Swift Medical Partner - Tucson")
+                        })
+                    })
+                    put("dvir_status", "submitted_today")
                 }
             }
-            "getTrafficAndWeather" -> {
+            
+            "getLoadInformation" -> {
+                val loadType = args?.get("loadType")?.jsonPrimitive?.contentOrNull ?: "current"
+                if (loadType == "current") {
+                    buildJsonObject {
+                        put("driver_id", DEMO_DRIVER_ID)
+                        put("load_id", DEMO_ACTIVE_LOAD_ID)
+                        put("bol_number", "BOL-902771-4821")
+                        put("status", "in_transit")
+                        put("priority", "high")
+                        put("load_type", "live_load")
+                        put("customer", buildJsonObject {
+                            put("name", "Walmart DC #213")
+                            put("swift_csr_phone", "800-800-2200")
+                            put("reference_number", "WMT-213-902771")
+                        })
+                        put("origin", "Reno, NV")
+                        put("destination", "Dallas, TX")
+                        put("next_stop_eta", "2026-04-15T19:40")
+                        put("stops", buildJsonArray {
+                            add(buildJsonObject {
+                                put("stop_index", 1)
+                                put("type", "pickup")
+                                put("facility", "Silver State Distribution")
+                                put("city", "Reno, NV")
+                                put("appointment", "2026-04-14T09:00")
+                                put("arrival_time", "2026-04-14T08:45")
+                                put("status", "completed")
+                            })
+                            add(buildJsonObject {
+                                put("stop_index", 2)
+                                put("type", "fuel")
+                                put("facility", "Swift Fuel Network #AZ-17")
+                                put("city", "Flagstaff, AZ")
+                                put("appointment", "2026-04-15T19:30")
+                                put("arrival", "2026-04-15T19:40")
+                                put("status", "in_progress")
+                                put("risk", "minor_delay_10m")
+                            })
+                            add(buildJsonObject {
+                                put("stop_index", 3)
+                                put("type", "delivery")
+                                put("facility", "DFW Retail Crossdock")
+                                put("city", "Dallas, TX")
+                                put("appointment", "2026-04-16T13:00")
+                                put("status", "pending")
+                                put("risk", "tight_eta_due_to_i40_winds")
+                            })
+                        })
+                        put("route_risks", buildJsonArray {
+                            add(buildJsonObject {
+                                put("segment", "I-40 EB mm 167-210")
+                                put("risk_type", "crosswind")
+                                put("severity", "medium")
+                                put("confidence", 0.86)
+                            })
+                        })
+                    }
+                } else {
+                    buildJsonObject {
+                        put("driver_id", DEMO_DRIVER_ID)
+                        put("load_id", "902812")
+                        put("bol_number", "BOL-902812-9234")
+                        put("status", "pending_dispatch")
+                        put("load_type", "drop_hook")
+                        put("preload_available", true)
+                        put("customer", buildJsonObject {
+                            put("name", "Atlanta Distribution Center (Target)")
+                            put("swift_csr_phone", "800-800-2200")
+                            put("reference_number", "TGT-ATL-902812")
+                        })
+                        put("origin", "Dallas, TX")
+                        put("destination", "Atlanta, GA")
+                        put("pickup_window", "2026-04-16T15:00 to 2026-04-16T19:00")
+                        put("delivery_window", "2026-04-18T08:00 to 2026-04-18T12:00")
+                        put("total_miles", 780)
+                        put("equipment_required", "53ft Dry Van")
+                        put("notes", "High value load, no unauthorized stops. Preload available at Dallas yard.")
+                    }
+                }
+            }
+            
+            "getFinancials" -> {
+                val period = args?.get("period")?.jsonPrimitive?.contentOrNull ?: "current"
+                when (period) {
+                    "current" -> buildJsonObject {
+                        put("driver_id", DEMO_DRIVER_ID)
+                        put("pay_period", "2026-03-28 to 2026-04-10")
+                        put("pay_date", "2026-04-11")
+                        put("base_pay", buildJsonObject {
+                            put("miles_paid", 2850)
+                            put("cpm_rate", 0.52)
+                            put("base_amount", 1482.00)
+                        })
+                        put("accessorial_pay", buildJsonArray {
+                            add(buildJsonObject {
+                                put("type", "Layover")
+                                put("amount", 150.00)
+                                put("reason", "Weather delay in Flagstaff")
+                                put("date", "2026-04-05")
+                            })
+                            add(buildJsonObject {
+                                put("type", "Detention")
+                                put("amount", 75.00)
+                                put("reason", "Shipper delay - Reno")
+                                put("date", "2026-04-02")
+                            })
+                        })
+                        put("deductions", buildJsonArray {
+                            add(buildJsonObject {
+                                put("type", "Insurance")
+                                put("amount", -85.50)
+                                put("description", "Health/Dental/Vision")
+                            })
+                        })
+                        put("net_amount", 1450.25)
+                    }
+                    "ytd" -> buildJsonObject {
+                        put("driver_id", DEMO_DRIVER_ID)
+                        put("ytd_gross", 16850.00)
+                        put("ytd_net", 14250.75)
+                        put("total_miles_ytd", 32400)
+                        put("average_cpm_ytd", 0.52)
+                    }
+                    "bonus" -> buildJsonObject {
+                        put("driver_id", DEMO_DRIVER_ID)
+                        put("program_name", "Knight-Swift Safety Bonus Program")
+                        put("current_quarter", "Q2 2026")
+                        put("monthly_safety_class", buildJsonObject {
+                            put("required", true)
+                            put("month", "April 2026")
+                            put("title", "Defensive Driving Techniques")
+                            put("deadline", "2026-04-30")
+                            put("status", "completed")
+                            put("completion_date", "2026-04-15")
+                            put("bonus_amount", 150.00)
+                        })
+                        put("quarterly_bonus_status", buildJsonObject {
+                            put("eligible", true)
+                            put("current_score", 945)
+                            put("required_score", 900)
+                            put("projected_bonus", 450.00)
+                            put("payment_date", "2026-07-15")
+                        })
+                        put("total_projected_earnings", 600.00)
+                    }
+                    else -> buildJsonObject {
+                        put("error", "Invalid period. Use 'current', 'ytd', or 'bonus'.")
+                    }
+                }
+            }
+            
+            "getRouteConditions" -> {
                 buildJsonObject {
                     put("driver_id", DEMO_DRIVER_ID)
                     put("time_horizon", "1 hour")
@@ -258,179 +334,7 @@ object TruckingTools {
                             put("recommended_action", "Expect 5-10 minute delay.")
                         })
                     })
-                }
-            }
-            "getDispatchInbox" -> {
-                val unreadOnly = args?.get("unreadOnly")?.jsonPrimitive?.booleanOrNull ?: false
-                val messages = buildJsonArray {
-                    add(buildJsonObject {
-                        put("message_id", "DSP-77101")
-                        put("unread", true)
-                        put("priority", "high")
-                        put("subject", "Delivery gate code updated")
-                        put("body", "DFW Retail Crossdock gate code is now 4729#. Confirm receipt.")
-                        put("created_at", "2026-04-15T13:55")
-                    })
-                    add(buildJsonObject {
-                        put("message_id", "DSP-77088")
-                        put("unread", false)
-                        put("priority", "normal")
-                        put("subject", "Fuel stop preference")
-                        put("body", "Use Swift Fuel Network #AZ-17 when practical.")
-                        put("created_at", "2026-04-15T09:10")
-                    })
-                }
-                val filteredMessages = if (unreadOnly) {
-                    JsonArray(messages.filter { it.jsonObject["unread"]?.jsonPrimitive?.boolean == true })
-                } else {
-                    messages
-                }
-                buildJsonObject { put("messages", filteredMessages) }
-            }
-
-            "getCompanyFAQs" -> {
-                buildJsonObject {
-                    put("company", "Swift Transportation")
-                    put("last_updated", "2026-04-10")
-                    put("categories", buildJsonArray {
-                        // Dog / Pet Policy
-                        add(buildJsonObject {
-                            put("category", "Pet Policy")
-                            put("policy_summary", "Swift allows company drivers to bring one dog, weighing 40 pounds or less.")
-                            put("details", buildJsonArray {
-                                add("Pet Type: Dogs only (no cats, birds, or exotic animals).")
-                                add("Weight Restriction: Maximum 40 pounds.")
-                                add("Required Documentation: Valid vaccination records and a rabies certificate.")
-                                add("Approval Process: Terminal leader approval is mandatory.")
-                                add("Pets must be well-behaved and house-trained.")
-                            })
-                        })
-                        // Rider Policy
-                        add(buildJsonObject {
-                            put("category", "Rider Policy")
-                            put("policy_summary", "Authorized riders are permitted with a valid permit.")
-                            put("details", buildJsonArray {
-                                add("Riders must be at least 12 years old.")
-                                add("A small monthly insurance fee is deducted from pay.")
-                                add("Permits must be renewed annually.")
-                            })
-                        })
-                        // Breakdown / Maintenance
-                        add(buildJsonObject {
-                            put("category", "Breakdown SOP")
-                            put("policy_summary", "Protocol for mechanical issues on the road.")
-                            put("details", buildJsonArray {
-                                add("Use the 'Breakdown' macro on your tablet immediately.")
-                                add("Call On-Road Support (Option 4) if you are in a safety-sensitive location.")
-                                add("Wait for a PO number before authorizing any 3rd party repairs.")
-                            })
-                        })
-                        // Late for Appointment
-                        add(buildJsonObject {
-                            put("category", "Late for Appointment")
-                            put("policy_summary", "Protocol for reporting delays to shippers or receivers.")
-                            put("details", buildJsonArray {
-                                add("If you anticipate being late for a pickup or delivery, you must send a Macro 22 (Late Arrival) via your tablet.")
-                                add("Include the reason for the delay and your new Estimated Time of Arrival (ETA).")
-                                add("Communicate delays as early as possible to allow Driver Managers to reschedule appointments.")
-                            })
-                        })
-                        // Common Tablet Macros
-                        add(buildJsonObject {
-                            put("category", "Common Tablet Macros")
-                            put("policy_summary", "Quick reference guide for standard in-cab communication macros.")
-                            put("details", buildJsonArray {
-                                add("Macro 1: Arrived at Shipper/Pickup.")
-                                add("Macro 2: Loaded and Leaving Shipper.")
-                                add("Macro 3: Arrived at Consignee/Delivery.")
-                                add("Macro 4: Empty and Available for Dispatch.")
-                                add("Macro 8: Request Home Time.")
-                                add("Macro 15: Request Cash Advance (for tolls/lumper).")
-                                add("Macro 22: Running Late / ETA Update.")
-                                add("Macro 55: On-Road Breakdown Report.")
-                            })
-                        })
-                        // Headset Recommendations
-                        add(buildJsonObject {
-                            put("category", "Headset Recommendations")
-                            put("policy_summary", "FMCSA regulations require hands-free devices. Headsets must leave one ear open to hear emergency signals.")
-                            put("details", buildJsonArray {
-                                add("BlueParrott B450-XT: 96% noise cancellation, 24h battery, 300ft range. Price: $160 - $180.")
-                                add("Blue Tiger Elite Ultra 2.0: 96% noise cancellation, 60h talk time. Price: $210 - $230.")
-                            })
-                        })
-                    })
-                }
-            }
-
-            "getPaycheckInfo" -> {
-                // Placeholder for your paycheck tool
-                buildJsonObject {
-                    put("driver_id", DEMO_DRIVER_ID)
-                    put("last_paycheck_date", "2026-04-11")
-                    put("net_amount", 1450.25)
-                    put("miles_paid", 2850)
-                    put("cpm_rate", 0.52)
-                }
-            }
-            
-            "findNearestSwiftTerminal" -> {
-                buildJsonObject {
-                    put("driver_location", "I-40 EB near Flagstaff, AZ")
-                    put("nearest_terminal", buildJsonObject {
-                        put("name", "Jurupa Valley Terminal")
-                        put("distance_miles", 385)
-                        put("address", "11200 San Sevaine Way, Jurupa Valley, CA 91752")
-                        put("amenities", buildJsonArray {
-                            add("Open Showers")
-                            add("Driver Lounge")
-                            add("Full-Service Maintenance Shop")
-                            add("Tractor/Trailer Wash")
-                            add("Secure Parking")
-                        })
-                    })
-                    put("alternative_drop_yard", buildJsonObject {
-                        put("name", "Phoenix Terminal")
-                        put("distance_miles", 145)
-                        put("address", "2200 S 75th Ave, Phoenix, AZ 85043")
-                        put("amenities", buildJsonArray {
-                            add("Driver Lounge")
-                            add("Maintenance Shop")
-                            add("Fuel Island")
-                        })
-                    })
-                }
-            }
-            
-            "checkSafetyScore" -> {
-                buildJsonObject {
-                    put("driver_id", DEMO_DRIVER_ID)
-                    put("current_score", 945)
-                    put("status", "Green / Bonus Eligible")
-                    put("company_percentile", "Top 15%")
-                    put("recent_events", buildJsonArray {
-                        add(buildJsonObject {
-                            put("event_type", "Hard Braking")
-                            put("date", "2026-04-14")
-                            put("location", "I-40 near Kingman, AZ")
-                            put("severity", "Moderate")
-                            put("impact_on_score", "-3 pts")
-                        })
-                        add(buildJsonObject {
-                            put("event_type", "Overspeed (>5mph)")
-                            put("date", "2026-04-10")
-                            put("location", "US-93 near Wickenburg, AZ")
-                            put("severity", "Minor")
-                            put("impact_on_score", "-1 pts")
-                        })
-                    })
-                }
-            }
-            
-            "getFuelNetworkRouting" -> {
-                buildJsonObject {
-                    put("driver_id", DEMO_DRIVER_ID)
-                    put("recommended_stop", buildJsonObject {
+                    put("fuel_recommendation", buildJsonObject {
                         put("brand", "Pilot")
                         put("location", "Flagstaff, AZ (Exit 195)")
                         put("distance_miles", 12)
@@ -445,135 +349,181 @@ object TruckingTools {
                     put("restriction_warning", "Do NOT fuel at independent stops on this corridor; use only Pilot/Flying J/Love's or Swift yards.")
                 }
             }
-
-            "getContacts" -> {
+            
+            "getCommunications" -> {
+                val type = args?.get("type")?.jsonPrimitive?.contentOrNull ?: "messages"
+                val unreadOnly = args?.get("unreadOnly")?.jsonPrimitive?.booleanOrNull ?: false
+                if (type == "messages") {
+                    val messages = buildJsonArray {
+                        add(buildJsonObject {
+                            put("message_id", "DSP-77101")
+                            put("unread", true)
+                            put("priority", "high")
+                            put("subject", "Delivery gate code updated")
+                            put("body", "DFW Retail Crossdock gate code is now 4729#. Confirm receipt.")
+                            put("created_at", "2026-04-15T13:55")
+                        })
+                        add(buildJsonObject {
+                            put("message_id", "DSP-77088")
+                            put("unread", false)
+                            put("priority", "normal")
+                            put("subject", "Fuel stop preference")
+                            put("body", "Use Swift Fuel Network #AZ-17 when practical.")
+                            put("created_at", "2026-04-15T09:10")
+                        })
+                    }
+                    val filteredMessages = if (unreadOnly) {
+                        JsonArray(messages.filter { it.jsonObject["unread"]?.jsonPrimitive?.boolean == true })
+                    } else {
+                        messages
+                    }
+                    buildJsonObject { 
+                        put("type", "messages")
+                        put("messages", filteredMessages) 
+                    }
+                } else {
+                    buildJsonObject {
+                        put("type", "contacts")
+                        put("driver_leader", buildJsonObject {
+                            put("name", "Sarah Jenkins")
+                            put("contact_method", "In-cab Macro or Driver Portal")
+                            put("phone", "(602) 269-9700 ext 4561 (Phoenix Terminal)")
+                            put("availability", "Mon-Fri 0800-1700")
+                        })
+                        put("fleet_leader", buildJsonObject {
+                            put("name", "Marcus Reynolds (Dry Van OTR)")
+                            put("contact_method", "In-cab Macro or Driver Portal")
+                        })
+                        put("departments", buildJsonArray {
+                            add(buildJsonObject {
+                                put("name", "Driver Support Services (24/7)")
+                                put("phone", "800-555-0199")
+                                put("function", "Urgent on-road needs, dispatch issues, routing")
+                            })
+                            add(buildJsonObject {
+                                put("name", "On-Road Breakdown Support")
+                                put("phone", "800-555-0188")
+                                put("function", "Mechanical issues, repairs, authorization")
+                            })
+                            add(buildJsonObject {
+                                put("name", "Payroll")
+                                put("phone", "800-555-0177")
+                            })
+                        })
+                    }
+                }
+            }
+            
+            "getCompanyResources" -> {
+                val category = args?.get("category")?.jsonPrimitive?.contentOrNull ?: "policies"
+                when (category) {
+                    "policies" -> buildJsonObject {
+                        put("company", "Swift Transportation")
+                        put("last_updated", "2026-04-10")
+                        put("categories", buildJsonArray {
+                            add(buildJsonObject {
+                                put("category", "Pet Policy")
+                                put("policy_summary", "Swift allows company drivers to bring one dog, weighing 40 pounds or less.")
+                            })
+                            add(buildJsonObject {
+                                put("category", "Rider Policy")
+                                put("policy_summary", "Authorized riders are permitted with a valid permit.")
+                            })
+                            add(buildJsonObject {
+                                put("category", "Breakdown SOP")
+                                put("policy_summary", "Protocol for mechanical issues on the road.")
+                            })
+                        })
+                    }
+                    "mentor" -> buildJsonObject {
+                        put("program_name", "Swift Driver Mentor Program")
+                        put("overview", "Pass along your knowledge to the next generation of drivers while enhancing your own earning potential.")
+                        put("benefits", buildJsonArray {
+                            add("Boost earning potential: Top 25% of mentors make $100,000 annually.")
+                            add("Build connections and take control of your career path.")
+                        })
+                        put("requirements", buildJsonArray {
+                            add("Class A CDL.")
+                            add("Solid, safe driving record.")
+                            add("Approval from Driver Leader, Terminal Leader, and Safety Leader.")
+                        })
+                    }
+                    "ownerOperator" -> buildJsonObject {
+                        put("program_name", "Swift Owner-Operator Program")
+                        put("value_proposition", "Unlock your entrepreneurial spirit and take control of your destiny by becoming your own boss.")
+                        put("financial_perks", buildJsonArray {
+                            add("No credit checks: Accessible regardless of credit history.")
+                            add("$0 down lease options: Start your journey without upfront costs.")
+                            add("Percentage-based pay: 70% of the market rate for each load.")
+                        })
+                    }
+                    "training" -> buildJsonObject {
+                        put("driver_id", DEMO_DRIVER_ID)
+                        put("required_modules", buildJsonArray {
+                            add(buildJsonObject {
+                                put("module_id", "SAFE-001")
+                                put("title", "Defensive Driving Techniques")
+                                put("type", "video")
+                                put("duration_minutes", 25)
+                                put("status", "completed")
+                                put("completion_date", "2026-04-15")
+                                put("link", "https://swiftuniversity.com/modules/safe-001")
+                            })
+                            add(buildJsonObject {
+                                put("module_id", "HOS-002")
+                                put("title", "Hours of Service Best Practices")
+                                put("type", "interactive")
+                                put("duration_minutes", 15)
+                                put("status", "in_progress")
+                                put("progress_percent", 60)
+                                put("link", "https://swiftuniversity.com/modules/hos-002")
+                            })
+                        })
+                    }
+                    else -> buildJsonObject {
+                        put("error", "Invalid category. Use 'policies', 'mentor', 'ownerOperator', or 'training'.")
+                    }
+                }
+            }
+            
+            "getComplianceStatus" -> {
                 buildJsonObject {
                     put("driver_id", DEMO_DRIVER_ID)
-                    put("driver_leader", buildJsonObject {
-                        put("name", "Sarah Jenkins")
-                        put("contact_method", "In-cab Macro or Driver Portal")
-                        put("phone", "(602) 269-9700 ext 4561 (Phoenix Terminal)")
-                        put("availability", "Mon-Fri 0800-1700")
+                    put("hos_compliance", buildJsonObject {
+                        put("drive_hours_remaining", "5h 15m")
+                        put("duty_time_remaining", "8h 45m")
+                        put("cycle_hours_remaining", "18h 45m")
+                        put("next_break_due_in", "2h 30m")
+                        put("alerts", buildJsonArray {
+                            add(buildJsonObject {
+                                put("category", "HOS")
+                                put("severity", "warning")
+                                put("message", "11-hour drive limit projected in 5h 15m.")
+                                put("due_by", "2026-04-15T20:05")
+                            })
+                        })
                     })
-                    put("fleet_leader", buildJsonObject {
-                        put("name", "Marcus Reynolds (Dry Van OTR)")
-                        put("contact_method", "In-cab Macro or Driver Portal")
+                    put("medical_card_status", buildJsonObject {
+                        put("expires_on", "2026-12-14")
+                        put("days_until_expiry", 243)
+                        put("reminder_scheduled", true)
+                        put("next_reminder_date", "2026-09-15")
+                        put("renewal_window_opens", "2026-10-14")
+                        put("dot_physical_required", true)
                     })
-                    put("departments", buildJsonArray {
-                        add(buildJsonObject {
-                            put("name", "Driver Support Services (24/7)")
-                            put("phone", "800-555-0199")
-                            put("function", "Urgent on-road needs, dispatch issues, routing")
-                        })
-                        add(buildJsonObject {
-                            put("name", "Driver Placement")
-                            put("phone", "866-588-5264")
-                            put("function", "Change fleets or discuss placement")
-                        })
-                        add(buildJsonObject {
-                            put("name", "Corporate Headquarters (Phoenix)")
-                            put("phone", "(602) 269-9700")
-                            put("address", "2200 South 75th Avenue, Phoenix, AZ 85043")
-                        })
-                        add(buildJsonObject {
-                            put("name", "On-Road Breakdown Support")
-                            put("phone", "800-555-0188")
-                            put("function", "Mechanical issues, repairs, authorization")
-                        })
-                        add(buildJsonObject {
-                            put("name", "Payroll")
-                            put("phone", "800-555-0177")
-                        })
+                    put("dvir_status", "submitted_today")
+                    put("annual_inspection", buildJsonObject {
+                        put("last_inspection_date", "2025-12-15")
+                        put("next_inspection_due", "2026-12-15")
+                        put("days_until_due", 244)
                     })
                 }
             }
 
-            "getNextLoadDetails" -> {
+            "closeApp" -> {
                 buildJsonObject {
-                    put("driver_id", DEMO_DRIVER_ID)
-                    put("load_id", "902812")
-                    put("status", "pending_dispatch")
-                    put("customer", buildJsonObject {
-                        put("name", "Atlanta Distribution Center (Target)")
-                        put("swift_csr_phone", "800-800-2200")
-                    })
-                    put("origin", "Dallas, TX")
-                    put("destination", "Atlanta, GA")
-                    put("pickup_window", "2026-04-16T15:00 to 2026-04-16T19:00")
-                    put("delivery_window", "2026-04-18T08:00 to 2026-04-18T12:00")
-                    put("total_miles", 780)
-                    put("equipment_required", "53ft Dry Van")
-                    put("notes", "High value load, no unauthorized stops.")
-                }
-            }
-
-            "getMentorFAQs" -> {
-                buildJsonObject {
-                    put("program_name", "Swift Driver Mentor Program")
-                    put("overview", "Pass along your knowledge to the next generation of drivers while enhancing your own earning potential.")
-                    put("benefits", buildJsonArray {
-                        add("Boost earning potential: Top 25% of mentors make $100,000 annually.")
-                        add("Build connections and take control of your career path.")
-                        add("Share valuable knowledge with new drivers.")
-                    })
-                    put("requirements", buildJsonArray {
-                        add("Class A CDL.")
-                        add("Solid, safe driving record.")
-                        add("Certain amount of time on the road (determined by leadership).")
-                        add("Approval from Driver Leader, Terminal Leader, and Safety Leader.")
-                    })
-                    put("steps_to_join", buildJsonArray {
-                        add("Step 1: Talk with your Driver Leader about joining the program.")
-                        add("Step 2: Apply online via the Driver Portal.")
-                        add("Step 3: Enroll in Swift University's 'Driver Certification Mentor Program' upon approval.")
-                    })
-                    put("faqs", buildJsonArray {
-                        add(buildJsonObject {
-                            put("question", "How do I know if I qualify?")
-                            put("answer", "Your Driver Leader, Terminal Leader, and Safety Leader will let you know based on your experience and record.")
-                        })
-                        add(buildJsonObject {
-                            put("question", "Do I have to train all the time?")
-                            put("answer", "Full-time training is welcome but not required. You can train part-time and drive solo in between students.")
-                        })
-                        add(buildJsonObject {
-                            put("question", "Should I be concerned about personal space?")
-                            put("answer", "Discuss personal boundaries and cab etiquette with new students. Be courteous and allow for personal space.")
-                        })
-                        add(buildJsonObject {
-                            put("question", "Can I mentor even though I don't drive OTR?")
-                            put("answer", "Yes, most lines of business at Swift have mentors. Talk with leadership to confirm.")
-                        })
-                    })
-                }
-            }
-
-            "getOwnerOperatorFAQs" -> {
-                buildJsonObject {
-                    put("program_name", "Swift Owner-Operator Program")
-                    put("value_proposition", "Unlock your entrepreneurial spirit and take control of your destiny by becoming your own boss.")
-                    put("financial_perks", buildJsonArray {
-                        add("No credit checks: Accessible regardless of credit history.")
-                        add("$0 down lease options: Start your journey without upfront costs.")
-                        add("Percentage-based pay: 70% of the market rate for each load.")
-                        add("Fuel surcharges: Based on the national average to keep net fuel costs stable.")
-                    })
-                    put("equipment_and_tech", buildJsonArray {
-                        add("Late model trucks: Freightliner, Kenworth, Peterbilt, Volvo, and International.")
-                        add("Opti-Idle & Heating: Optimal fuel savings and cab comfort.")
-                        add("Tech suite: Geotab tablets and Netradyne outward-facing dash cameras.")
-                        add("Customization: Personalized decal package options.")
-                    })
-                    put("support_network", buildJsonArray {
-                        add("Owner-Operator Load Board: View and book your own loads (Dry OTR).")
-                        add("24/7 On-Road support and Rapid Response team.")
-                        add("Access to 50+ shops and terminals with free parking and reduced shop rates ($80/hr).")
-                    })
-                    put("how_to_start", buildJsonObject {
-                        put("action", "Contact a Recruiter")
-                        put("phone", "877-772-1846")
-                        put("text", "602-559-1675")
-                    })
+                    put("action", "close_application")
+                    put("message", "Closing the app. Drive safe.")
                 }
             }
 

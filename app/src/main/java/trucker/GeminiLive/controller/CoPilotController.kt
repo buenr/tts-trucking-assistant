@@ -9,6 +9,7 @@ import trucker.geminilive.audio.SttManager
 import trucker.geminilive.audio.TtsManager
 import trucker.geminilive.network.*
 import trucker.geminilive.tools.TruckingTools
+import kotlinx.serialization.json.jsonObject
 
 /**
  * Co-Pilot Logic Controller.
@@ -19,7 +20,8 @@ class CoPilotController(
     context: Context,
     private val sttManager: SttManager,
     private val ttsManager: TtsManager,
-    private val geminiClient: GeminiRestClient
+    private val geminiClient: GeminiRestClient,
+    private val onCloseAppRequested: () -> Unit = {}
 ) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -36,6 +38,8 @@ class CoPilotController(
     private var interactionId: String? = null
     private var processingJob: Job? = null
     private var isActive = false
+    private var shouldCloseAppAfterTts = false
+    private var speakSessionId: String? = null
 
     init {
         sttManager.setCallbacks(
@@ -47,11 +51,15 @@ class CoPilotController(
             onError = { errorCode ->
                 addLog("STT Error: $errorCode")
                 _partialText.value = ""
+                // Only retry if we're still supposed to be listening (not processing)
                 if (isActive && _uiState.value.aiState == AiState.LISTENING) {
                     // Small error recovery delay, then resume listening
                     scope.launch {
                         delay(500)
-                        startListening()
+                        // Double-check state after delay - don't interrupt CHECKING_DATA/SPEAKING
+                        if (_uiState.value.aiState == AiState.LISTENING) {
+                            startListening()
+                        }
                     }
                 }
             }
@@ -64,14 +72,22 @@ class CoPilotController(
             }
         }
 
-        // TTS completion auto-resumes listening
+        // TTS completion auto-resumes listening (or closes app if requested)
         ttsManager.setOnSpeakComplete {
             addLog("TTS complete")
-            if (isActive) {
+            if (shouldCloseAppAfterTts) {
+                addLog("Closing app as requested")
+                onCloseAppRequested()
+                return@setOnSpeakComplete
+            }
+            // Only transition if we're still in SPEAKING state and no new session started
+            if (isActive && _uiState.value.aiState == AiState.SPEAKING) {
                 scope.launch {
                     delay(300)
-                    transitionTo(AiState.IDLE)
-                    startListening()
+                    // Double-check state after delay to prevent race conditions
+                    if (_uiState.value.aiState == AiState.SPEAKING) {
+                        startListening()
+                    }
                 }
             }
         }
@@ -81,13 +97,14 @@ class CoPilotController(
         if (isActive) return
         isActive = true
         interactionId = null
+        shouldCloseAppAfterTts = false
         _logs.value = emptyList()
         _partialText.value = ""
         updateUi {
             it.copy(
                 isConnected = true,
                 status = "Connected",
-                aiState = AiState.IDLE,
+                aiState = AiState.LISTENING,
                 currentTool = "",
                 lastError = "",
                 userText = "",
@@ -108,7 +125,7 @@ class CoPilotController(
             it.copy(
                 isConnected = false,
                 status = "Disconnected",
-                aiState = AiState.IDLE
+                aiState = AiState.LISTENING
             )
         }
         addLog("Session stopped")
@@ -121,21 +138,16 @@ class CoPilotController(
             return
         }
         when (_uiState.value.aiState) {
-            AiState.IDLE, AiState.LISTENING -> {
+            AiState.LISTENING -> {
                 // If already listening, this keypress can be used to force-stop and process
                 // For now, just restart listening
                 sttManager.stopListening()
                 startListening()
             }
-            AiState.THINKING, AiState.WORKING, AiState.SPEAKING -> {
+            AiState.CHECKING_DATA, AiState.SPEAKING -> {
                 // Cancel current operation and return to listening
                 processingJob?.cancel()
                 ttsManager.stop()
-                startListening()
-            }
-            AiState.OFFLINE -> {
-                // Try to come back online
-                transitionTo(AiState.IDLE)
                 startListening()
             }
         }
@@ -143,7 +155,13 @@ class CoPilotController(
 
     private fun startListening() {
         if (!isActive) return
-        if (_uiState.value.aiState == AiState.SPEAKING) return
+
+        // Only enter listening from listening/speaking states, not from checking data
+        val currentState = _uiState.value.aiState
+        if (currentState == AiState.CHECKING_DATA) {
+            addLog("Skipping startListening: currently $currentState")
+            return
+        }
 
         transitionTo(AiState.LISTENING)
         addLog("Listening...")
@@ -159,7 +177,7 @@ class CoPilotController(
         processingJob?.cancel()
         processingJob = scope.launch {
             updateUi { it.copy(userText = text) }
-            transitionTo(AiState.THINKING)
+            transitionTo(AiState.CHECKING_DATA)
 
             try {
                 val apiKey = VertexAuth.getApiKey(appContext)
@@ -181,37 +199,30 @@ class CoPilotController(
                             streamingStarted = true
                             val firstChunk = buffered.trim()
                             partialTextBuffer.clear()
+                            speakSessionId = interactionId ?: "session_${System.currentTimeMillis()}"
 
                             scope.launch {
                                 addLog("Gemini streaming: ${firstChunk.take(80)}...")
                                 transitionTo(AiState.SPEAKING)
-                                ttsManager.streamText(firstChunk)
+                                ttsManager.streamText(firstChunk, speakSessionId)
                             }
                         } else if (streamingStarted) {
                             val delta = deltaText.trim()
                             if (delta.isNotEmpty()) {
                                 scope.launch {
-                                    ttsManager.streamText(delta)
+                                    ttsManager.streamText(delta, speakSessionId)
                                 }
                             }
                         }
                     }
                 }
 
-                // Flush any remaining buffered text
-                synchronized(partialTextBuffer) {
-                    if (partialTextBuffer.isNotBlank()) {
-                        val leftover = partialTextBuffer.toString().trim()
-                        partialTextBuffer.clear()
-                        if (leftover.isNotBlank()) {
-                            if (!streamingStarted) {
-                                transitionTo(AiState.SPEAKING)
-                            }
-                            ttsManager.streamText(leftover)
-                        }
-                    }
+                // Flush any remaining buffered text in TtsManager
+                if (!streamingStarted) {
+                    speakSessionId = interactionId ?: "session_${System.currentTimeMillis()}"
+                    transitionTo(AiState.SPEAKING)
                 }
-                ttsManager.flushStreamBuffer()
+                ttsManager.flushStreamBuffer(speakSessionId)
 
                 if (!streamingStarted) {
                     // No streaming text received at all
@@ -230,19 +241,22 @@ class CoPilotController(
                         }
                         is GeminiResponse.Error -> {
                             addLog("Error: ${response.message}")
-                            transitionTo(AiState.IDLE)
-                            ttsManager.speak("Sorry, I encountered an error. Please try again.")
+                            speakSessionId = "error_${System.currentTimeMillis()}"
+                            transitionTo(AiState.SPEAKING)
+                            ttsManager.speak("Sorry, I encountered an error. Please try again.", speakSessionId)
                         }
                     }
                 }
             } catch (e: NetworkFailureException) {
                 addLog("Network failure: ${e.message}")
-                transitionTo(AiState.OFFLINE)
-                ttsManager.speak("I've lost connection to dispatch. Try again when we have a signal.")
+                speakSessionId = "network_error_${System.currentTimeMillis()}"
+                transitionTo(AiState.SPEAKING)
+                ttsManager.speak("I've lost connection to dispatch. Try again when we have a signal.", speakSessionId)
             } catch (e: Exception) {
                 addLog("Exception: ${e.message}")
-                transitionTo(AiState.IDLE)
-                ttsManager.speak("Sorry, I encountered an error. Please try again.")
+                speakSessionId = "exception_${System.currentTimeMillis()}"
+                transitionTo(AiState.SPEAKING)
+                ttsManager.speak("Sorry, I encountered an error. Please try again.", speakSessionId)
             }
         }
     }
@@ -254,8 +268,9 @@ class CoPilotController(
                 if (response.text.isNotBlank()) {
                     addLog("Gemini: ${response.text.take(100)}...")
                     updateUi { it.copy(geminiText = response.text) }
+                    speakSessionId = interactionId ?: "session_${System.currentTimeMillis()}"
                     transitionTo(AiState.SPEAKING)
-                    ttsManager.speak(response.text)
+                    ttsManager.speak(response.text, speakSessionId)
                 } else {
                     startListening()
                 }
@@ -267,8 +282,9 @@ class CoPilotController(
             is GeminiResponse.Error -> {
                 addLog("Error: ${response.message}")
                 updateUi { it.copy(lastError = response.message) }
-                transitionTo(AiState.IDLE)
-                ttsManager.speak("Sorry, I encountered an error. Please try again.")
+                speakSessionId = "error_${System.currentTimeMillis()}"
+                transitionTo(AiState.SPEAKING)
+                ttsManager.speak("Sorry, I encountered an error. Please try again.", speakSessionId)
             }
         }
     }
@@ -276,27 +292,37 @@ class CoPilotController(
     private fun handleToolCalls(response: GeminiResponse.NeedsFunctionCall) {
         if (response.calls.isEmpty()) {
             addLog("Error: Model requested action but provided no function calls")
-            transitionTo(AiState.IDLE)
             startListening()
             return
         }
 
-        transitionTo(AiState.WORKING)
+        transitionTo(AiState.CHECKING_DATA)
         val call = response.calls.first()
         updateUi { it.copy(currentTool = call.name) }
         addLog("TOOL CALL: ${call.name}")
 
+        // Check if this is a closeApp request
+        if (call.name == "closeApp") {
+            shouldCloseAppAfterTts = true
+        }
+
         scope.launch {
             try {
                 val apiKey = VertexAuth.getApiKey(appContext)
+
+                // Execute tool calls in the controller, not the REST client
+                val functionResults = response.calls.map { call ->
+                    val args = call.args?.jsonObject?.mapValues { it.value }
+                    val result = TruckingTools.handleToolCall(call.name, args)
+                    FunctionResult(
+                        callId = call.id,
+                        name = call.name,
+                        result = result
+                    )
+                }
+
                 val finalResponse = geminiClient.sendFunctionResults(
-                    functionResults = response.calls.map {
-                        FunctionResult(
-                            callId = it.id,
-                            name = it.name,
-                            result = it.result
-                        )
-                    },
+                    functionResults = functionResults,
                     apiKey = apiKey,
                     previousInteractionId = response.interactionId
                 )
@@ -307,8 +333,9 @@ class CoPilotController(
                         if (finalResponse.text.isNotBlank()) {
                             addLog("Gemini: ${finalResponse.text.take(100)}...")
                             updateUi { it.copy(geminiText = finalResponse.text, currentTool = "") }
+                            speakSessionId = interactionId ?: "session_${System.currentTimeMillis()}"
                             transitionTo(AiState.SPEAKING)
-                            ttsManager.speak(finalResponse.text)
+                            ttsManager.speak(finalResponse.text, speakSessionId)
                         } else {
                             updateUi { it.copy(currentTool = "") }
                             startListening()
@@ -317,23 +344,28 @@ class CoPilotController(
                     is GeminiResponse.Error -> {
                         addLog("Error: ${finalResponse.message}")
                         updateUi { it.copy(lastError = finalResponse.message, currentTool = "") }
-                        transitionTo(AiState.IDLE)
-                        ttsManager.speak("Sorry, I encountered an error. Please try again.")
+                        speakSessionId = "error_${System.currentTimeMillis()}"
+                        transitionTo(AiState.SPEAKING)
+                        ttsManager.speak("Sorry, I encountered an error. Please try again.", speakSessionId)
                     }
                     else -> {
                         addLog("Unexpected response type")
                         updateUi { it.copy(currentTool = "") }
-                        startListening()
+                        transitionTo(AiState.SPEAKING)
+                        speakSessionId = "unexpected_${System.currentTimeMillis()}"
+                        ttsManager.speak("Sorry, I didn't understand that response. Please try again.", speakSessionId)
                     }
                 }
             } catch (e: NetworkFailureException) {
                 addLog("Network failure during tool call: ${e.message}")
-                transitionTo(AiState.OFFLINE)
-                ttsManager.speak("I've lost connection to dispatch. Try again when we have a signal.")
+                speakSessionId = "network_error_${System.currentTimeMillis()}"
+                transitionTo(AiState.SPEAKING)
+                ttsManager.speak("I've lost connection to dispatch. Try again when we have a signal.", speakSessionId)
             } catch (e: Exception) {
                 addLog("Exception during tool call: ${e.message}")
-                transitionTo(AiState.IDLE)
-                ttsManager.speak("Sorry, I encountered an error. Please try again.")
+                speakSessionId = "exception_${System.currentTimeMillis()}"
+                transitionTo(AiState.SPEAKING)
+                ttsManager.speak("Sorry, I encountered an error. Please try again.", speakSessionId)
             }
         }
     }
@@ -366,7 +398,7 @@ class CoPilotController(
 
 data class CopilotUiState(
     val isConnected: Boolean = false,
-    val aiState: AiState = AiState.IDLE,
+    val aiState: AiState = AiState.LISTENING,
     val status: String = "Disconnected",
     val userText: String = "",
     val geminiText: String = "",
@@ -375,10 +407,7 @@ data class CopilotUiState(
 )
 
 enum class AiState(val label: String) {
-    IDLE("Ready"),
     LISTENING("Listening..."),
-    THINKING("Thinking..."),
-    WORKING("Checking Data..."),
-    SPEAKING("Speaking..."),
-    OFFLINE("Offline")
+    CHECKING_DATA("Checking Data..."),
+    SPEAKING("Speaking...")
 }

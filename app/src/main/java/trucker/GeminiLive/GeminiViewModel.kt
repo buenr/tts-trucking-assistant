@@ -19,18 +19,18 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
     // Managers
     private val sttManager = SttManager(application)
     private val ttsManager = TtsManager(application)
-    private val geminiClient = GeminiRestClient(
-        onToolCallStarted = { toolName ->
-            addLog("TOOL CALL: $toolName")
-        }
-    )
+    private var closeAppCallback: (() -> Unit)? = null
+    private val geminiClient = GeminiRestClient()
 
     // Controller
     private val controller = CoPilotController(
         context = application,
         sttManager = sttManager,
         ttsManager = ttsManager,
-        geminiClient = geminiClient
+        geminiClient = geminiClient,
+        onCloseAppRequested = {
+            closeAppCallback?.invoke()
+        }
     )
 
     // Startup
@@ -78,6 +78,11 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
         controller.onActiveKeyPressed()
     }
 
+    fun setCloseAppCallback(callback: () -> Unit) {
+        closeAppCallback = callback
+    }
+
+    
     fun addLog(message: String) {
         // Controller owns the logs; this is a convenience bridge for external log injection
         // Not needed for normal flow, but kept for compatibility if any external component needs it.

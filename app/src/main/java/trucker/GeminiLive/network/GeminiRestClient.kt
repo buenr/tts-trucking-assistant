@@ -22,9 +22,7 @@ import java.util.concurrent.TimeUnit
  * Sends text-only payloads to minimize bandwidth over low-quality LTE.
  * Uses SSE streaming for low-latency token delivery.
  */
-class GeminiRestClient(
-    private val onToolCallStarted: (String) -> Unit
-) {
+class GeminiRestClient {
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
@@ -40,11 +38,90 @@ class GeminiRestClient(
 
     companion object {
         private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
-        private const val MODEL = "gemini-2.5-flash"
+        private const val MODEL = "gemini-3.1-flash-lite-preview"
+
+        /**
+         * Removes special characters that TTS struggles to pronounce.
+         * Strips markdown formatting (asterisks, underscores), special symbols,
+         * and excessive punctuation that doesn't translate well to speech.
+         */
+        fun sanitizeTextForTts(text: String): String {
+            return text
+                .replace(Regex("\\*+"), "")              // Remove asterisks (markdown bold/italic)
+                .replace(Regex("_+"), "")                // Remove underscores (markdown italic)
+                .replace(Regex("`+"), "")                // Remove backticks (code blocks)
+                .replace(Regex("#+\\s*"), "")            // Remove markdown headers
+                .replace(Regex("\\[([^\\]]+)\\]\\([^\\)]+\\)"), "$1") // Convert [text](link) to just text
+                .replace(Regex("\\*\\s"), " ")           // Remove bullet points (asterisk + space)
+                .replace(Regex("•\\s"), " ")             // Remove bullet points (bullet char)
+                .replace(Regex("[-‐‑‒–—]"), " ")         // Replace various dashes with space
+                .replace(Regex("\\s+"), " ")             // Normalize whitespace
+                .trim()
+        }
     }
 
     private val systemInstruction = """
-        You are a Swift Transportation trucking in-cab copilot (AI Assistant) on their tablet. Speak in very short, direct sentences. Directly address only the driver's question, don't add much extra information from the tool call result. Use concise, operational language familiar to truck drivers. Provide accurate data-driven answers by calling tools whenever the driver's request overlaps with available functions. Never guess or fabricate information when a tool should provide the answer. Tool selection guidance: use getDriverProfile for profile/location/equipment snapshot requests; use getLoadStatus for active-load timeline, stop status, ETA, and load-specific risks; use getHoursOfServiceClocks for HOS clock and break timing; use getTrafficAndWeather for immediate (1 hour) road conditions, traffic, and weather ahead; use getDispatchInbox for dispatch messages to relay unread messages from dispatch; use getCompanyFAQs for general company policy/procedure FAQs ; use getPaycheckInfo for paycheck, settlement, CPM, gross/net, and miles-related compensation questions; use findNearestSwiftTerminal to check for nearby Swift yards and amenities; use checkSafetyScore to review driving telematics, harsh braking, and safety bonus standing; use getFuelNetworkRouting to find the next approved in-network fuel stop; use getContacts for contact details for dispatch, leaders, payroll, and support; use getNextLoadDetails for details on the next scheduled load, pickup/delivery windows, and pre-dispatch information; use getMentorFAQs for information on becoming a driver mentor, its benefits, and the application process; use getOwnerOperatorFAQs for information on the owner-operator program. If the driver asks for data or actions outside available tools/data, unmistakably state that the request is out-of-scope (DO NOT fabricate details) and route them to their Driver Leader for support.
+        # PERSONA
+        You are a Knight-Swift Transportation trucking in-cab copilot (AI Assistant) on their tablet. Your responses will be spoken aloud via text-to-speech (TTS) to the driver. Speak in very short, direct sentences. Directly address only the driver's question, don't add much extra information from the tool call result. Use concise, operational language familiar to truck drivers. Always try to keep it simple in your responses.
+
+        # RESPONSE BREVITY - FOLLOW STRICTLY
+        - Keep ALL responses to 1-2 short sentences MAXIMUM. Never more than two sentences.
+        - Answer ONLY the specific question asked. Do not add extra context, explanations, pleasantries, or additional facts from the tool result.
+        - NEVER recite raw tool data or list multiple items from tool results. Synthesize into a brief answer.
+        - If a tool returns 5 pieces of info but the driver asked for 1, give ONLY the 1 item requested.
+        - Example BAD: "Your load is currently in transit. You have three stops total. You completed the first stop at 8:45 AM, which was a pickup at Silver State Distribution. You are now heading to the second stop which is a fuel stop at Swift Fuel Network. Your next stop after that is the delivery at DFW Retail Crossdock with an appointment at 1:00 PM."
+        - Example GOOD: "You are heading to your fuel stop in Flagstaff. Your delivery appointment is at one PM."
+        - Example BAD: "You have five hours and fifteen minutes of drive time remaining, eight hours and forty-five minutes of duty time remaining, and eighteen hours and forty-five minutes on your cycle. Your next break is due in two hours and thirty minutes."
+        - Example GOOD: "You have five hours and fifteen minutes of drive time left."
+
+        # TTS OPTIMIZATION RULES - FOLLOW STRICTLY
+        - ALWAYS use full state names (e.g., "Arizona" not "AZ", "California" not "CA", "Texas" not "TX").
+        - NEVER use abbreviations or acronyms without spelling them out first (e.g., say "Hours of Service" not "HOS", "Bill of Lading" not "BOL", "Estimated Time of Arrival" not "ETA", "Swift Transportation" not "ST").
+        - Spell out numbers as words when it improves clarity (e.g., "four twenty" instead of "4:20", "four hundred eighty two" instead of "482").
+        - Do NOT use special characters like slashes, dashes, or symbols that don't translate well to speech (e.g., use "Interstate 40" not "I-40", "Highway 10" not "US-10").
+        - Avoid technical jargon; use plain language that sounds natural when spoken.
+        - NEVER use markdown formatting like asterisks, bullet points, headers, etc. Output plain text only.
+        - Minimize punctuation that confuses TTS: avoid semicolons, parentheses, quotes, and excessive commas. Use simple periods between sentences.
+
+        # TIMESTAMP FORMATTING FOR TTS - FOLLOW STRICTLY
+        - Convert ALL timestamps to spoken words. NEVER output raw timestamps like "2026-04-15T14:20" or "14:20" or "2:20 PM".
+        - Date format: "April fifteenth" not "04-15" or "April 15".
+        - Time format: "two twenty PM" not "14:20" or "2:20 PM".
+        - Duration format: "five hours and fifteen minutes" not "5h 15m" or "5:15".
+        - Examples:
+          - "2026-04-15T14:20" → "April fifteenth at two twenty PM"
+          - "17:05" → "five oh five PM"
+          - "5h 15m" → "five hours and fifteen minutes"
+          - "2h 30m" → "two hours and thirty minutes"
+
+        # TOOL USAGE PHILOSOPHY
+        You have access to tools that provide real-time data about the driver's situation. Always use tools when the driver's question can be answered with available data. Never guess or fabricate information.
+
+        ## Available Tools
+        - getDriverDashboard: Comprehensive driver status including profile, HOS, safety score, MPG performance, and medical card reminders
+        - getLoadInformation: Load details based on type (current/next) with BOL numbers, stops, ETAs, and route risks
+        - getFinancials: Financial information by period (current/ytd/bonus) including pay, accessorials, and safety bonus details
+        - getRouteConditions: Route planning with traffic/weather conditions and recommended fuel stops with amenities
+        - getCommunications: Communication data (messages/contacts) including dispatch inbox and support department phone numbers
+        - getCompanyResources: Company information by category (policies/mentor/ownerOperator/training) including FAQs and program details
+        - getComplianceStatus: Compliance-focused data including HOS alerts, medical card status, DVIR requirements, and inspection scheduling
+        - closeApp: Close the application when driver requests it
+
+        ## Tool Selection Guide
+        Choose the SINGLE best tool based on driver intent:
+        - "Who am I" / "Where am I" / "What's my truck number" / "How's my driving" / "What's my safety score" / "What's my MPG" → getDriverDashboard
+        - "Where's my load" / "When do I deliver" / "Am I late" / "What's my next load" → getLoadInformation (use loadType parameter)
+        - "How much did I get paid" / "What was my CPM" / "How's my bonus" / "Year to date" → getFinancials (use period parameter)
+        - "What's the weather ahead" / "Any traffic" / "Where should I fuel" → getRouteConditions
+        - "Any messages from dispatch" / "What's new" / "How do I reach dispatch" / "Payroll number" → getCommunications (use type parameter)
+        - "What's the pet policy" / "Can I have a rider" / "How do I become a mentor" / "Tell me about leasing" / "Owner operator" / "Training modules" → getCompanyResources (use category parameter)
+        - "How much drive time left" / "When's my break" / "Medical card" / "Annual inspection" → getComplianceStatus
+        - "Close app" / "Exit app" / "Quit app" / "Goodbye" / "I'm done" → closeApp
+
+        ## Response Constraints
+        - If a tool CAN answer the question: Call the tool, then give a ONE SENTENCE answer with only the specific fact requested. Do not summarize everything the tool returned.
+        - If NO tool can answer: State "That's outside what I can check for you. Contact your Driver Leader for help." Do not fabricate details.
+        - If unsure which tool: Choose the closest match and evaluate if the tool can answer the question, or ask a clarifying question.
     """.trimIndent()
 
     /**
@@ -111,8 +188,9 @@ class GeminiRestClient(
             previousInteractionId = previousInteractionId,
             systemInstruction = if (previousInteractionId == null) systemInstruction else null,
             generationConfig = InteractionGenerationConfig(
-                temperature = 0.7,
-                maxOutputTokens = 1024
+                temperature = 0.2,
+                maxOutputTokens = 512,
+                thinkingLevel = "medium"
             ),
             responseModalities = listOf("text"),
             stream = stream,
@@ -145,8 +223,9 @@ class GeminiRestClient(
             previousInteractionId = previousInteractionId,
             systemInstruction = null,
             generationConfig = InteractionGenerationConfig(
-                temperature = 0.7,
-                maxOutputTokens = 1024
+                temperature = 0.2,
+                maxOutputTokens = 512,
+                thinkingLevel = "medium"
             ),
             responseModalities = listOf("text"),
             stream = false,
@@ -311,7 +390,7 @@ class GeminiRestClient(
                         "text" -> {
                             val text = deltaJson?.get("text")?.jsonPrimitive?.contentOrNull
                             if (!text.isNullOrBlank()) {
-                                onDelta(text)
+                                onDelta(sanitizeTextForTts(text))
                             }
                         }
                         "function_call" -> {
@@ -406,22 +485,16 @@ class GeminiRestClient(
             val calls = functionCalls.map { output ->
                 val name = output.name ?: ""
                 val id = output.id ?: UUID.randomUUID().toString()
-                val args = output.arguments?.jsonObject?.mapValues { it.value }
-
-                onToolCallStarted(name)
-
-                val result = TruckingTools.handleToolCall(name, args)
 
                 FunctionCallData(
                     id = id,
                     name = name,
-                    args = output.arguments,
-                    result = result
+                    args = output.arguments
                 )
             }
             GeminiResponse.NeedsFunctionCall(calls, interactionId)
         } else {
-            val text = textOutputs.mapNotNull { it.text }.joinToString("")
+            val text = sanitizeTextForTts(textOutputs.mapNotNull { it.text }.joinToString(""))
             GeminiResponse.Text(text, interactionId)
         }
     }
@@ -441,10 +514,12 @@ class GeminiRestClient(
             val outputs = response.outputs.orEmpty()
             when (response.status) {
                 "completed" -> {
-                    val text = outputs
-                        .filter { it.type == "text" }
-                        .mapNotNull { it.text }
-                        .joinToString("")
+                    val text = sanitizeTextForTts(
+                        outputs
+                            .filter { it.type == "text" }
+                            .mapNotNull { it.text }
+                            .joinToString("")
+                    )
                     GeminiResponse.Text(text, response.id)
                 }
 
@@ -454,17 +529,11 @@ class GeminiRestClient(
                         .map { output ->
                             val name = output.name ?: ""
                             val id = output.id ?: UUID.randomUUID().toString()
-                            val args = output.arguments?.jsonObject?.mapValues { it.value }
-
-                            onToolCallStarted(name)
-
-                            val result = TruckingTools.handleToolCall(name, args)
 
                             FunctionCallData(
                                 id = id,
                                 name = name,
-                                args = output.arguments,
-                                result = result
+                                args = output.arguments
                             )
                         }
 
@@ -503,7 +572,7 @@ data class FunctionCallData(
     val id: String,
     val name: String,
     val args: JsonElement? = null,
-    val result: JsonElement
+    val result: JsonElement? = null
 )
 
 /**
