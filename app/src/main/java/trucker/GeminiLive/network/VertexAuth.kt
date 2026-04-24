@@ -4,30 +4,21 @@ import android.content.Context
 import com.google.auth.oauth2.ServiceAccountCredentials
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import trucker.geminilive.BuildConfig
 
+/**
+ * Vertex AI authentication helper.
+ * Uses service account JSON key for OAuth2 authentication with Vertex AI.
+ */
 object VertexAuth {
     private const val ASSET_NAME = "vertex-ai-testing1.json"
     private const val SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 
-    /**
-     * Get API key from BuildConfig.
-     * Primary authentication method for Interactions API.
-     */
-    fun getApiKey(context: Context): String {
-        return BuildConfig.GEMINI_API_KEY
-    }
-    
-    /**
-     * Check if API key is configured.
-     */
-    fun hasApiKey(): Boolean {
-        return BuildConfig.GEMINI_API_KEY.isNotBlank()
-    }
+    // Vertex AI configuration
+    const val LOCATION = "global"
+    const val MODEL = "gemini-3-flash-preview"
 
     /**
-     * Get OAuth2 access token (fallback method).
-     * Used when API key is not configured.
+     * Get OAuth2 access token from service account.
      */
     suspend fun getAccessToken(context: Context): String = withContext(Dispatchers.IO) {
         val stream = context.assets.open(ASSET_NAME)
@@ -37,9 +28,23 @@ object VertexAuth {
         credentials.accessToken.tokenValue
     }
 
+    /**
+     * Get project ID from service account JSON.
+     */
     fun getProjectId(context: Context): String {
         val stream = context.assets.open(ASSET_NAME)
         val credentials = ServiceAccountCredentials.fromStream(stream)
-        return credentials.projectId ?: "vertex-ai-testing1"
+        return credentials.projectId ?: throw IllegalStateException("Project ID not found in service account JSON")
+    }
+
+    /**
+     * Check if service account JSON exists in assets.
+     */
+    fun hasServiceAccount(context: Context): Boolean {
+        return try {
+            context.assets.list("")?.contains(ASSET_NAME) ?: false
+        } catch (e: Exception) {
+            false
+        }
     }
 }

@@ -8,6 +8,7 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import trucker.geminilive.network.VertexAuth
 import java.util.Locale
 import kotlin.coroutines.resume
 
@@ -22,6 +23,7 @@ class StartupReadinessManager(private val context: Context) {
         val isReady: Boolean,
         val sttAvailable: Boolean,
         val ttsOfflineVoiceAvailable: Boolean,
+        val vertexAiConfigured: Boolean,
         val errors: List<String>
     )
 
@@ -46,7 +48,7 @@ class StartupReadinessManager(private val context: Context) {
             Log.d("StartupReadiness", "Offline TTS voice available")
         }
 
-        // 3. Optional: verify Google TTS engine is present
+        // 3. Verify Google TTS engine is present
         val pm = context.packageManager
         val googleTtsInstalled = try {
             pm.getPackageInfo("com.google.android.tts", 0)
@@ -59,11 +61,21 @@ class StartupReadinessManager(private val context: Context) {
             Log.w("StartupReadiness", "Google TTS engine not installed")
         }
 
-        val isReady = sttAvailable && ttsOfflineVoiceAvailable && googleTtsInstalled
+        // 4. Check Vertex AI service account is configured
+        val vertexAiConfigured = VertexAuth.hasServiceAccount(context)
+        if (!vertexAiConfigured) {
+            errors.add("Vertex AI service account not configured. Please add vertex-ai-testing1.json to assets.")
+            Log.w("StartupReadiness", "Vertex AI service account not found")
+        } else {
+            Log.d("StartupReadiness", "Vertex AI service account configured")
+        }
+
+        val isReady = sttAvailable && ttsOfflineVoiceAvailable && googleTtsInstalled && vertexAiConfigured
         ReadinessReport(
             isReady = isReady,
             sttAvailable = sttAvailable,
             ttsOfflineVoiceAvailable = ttsOfflineVoiceAvailable,
+            vertexAiConfigured = vertexAiConfigured,
             errors = errors
         )
     }

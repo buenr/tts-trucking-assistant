@@ -1,6 +1,3 @@
-import java.util.Properties
-import java.io.InputStream
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -8,14 +5,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-val secretsPropertiesFile = rootProject.file("secrets.properties")
-val secretsProperties = Properties()
-if (secretsPropertiesFile.exists()) {
-    secretsPropertiesFile.inputStream().use { input: InputStream ->
-        secretsProperties.load(input)
-    }
-}
-val geminiApiKey: String = secretsProperties.getProperty("GEMINI_API_KEY", "")
+// Note: Vertex AI uses service account JSON key from assets, not API key
+// Add vertex-ai-testing1.json to app/src/main/assets/
 
 android {
     namespace = "trucker.geminilive"
@@ -29,7 +20,6 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
     }
 
     buildTypes {
@@ -68,6 +58,7 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.google.auth.library.oauth2.http)
+    implementation(libs.google.genai)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

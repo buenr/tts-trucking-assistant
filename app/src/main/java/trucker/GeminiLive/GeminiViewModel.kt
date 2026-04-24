@@ -11,7 +11,6 @@ import trucker.geminilive.audio.TtsManager
 import trucker.geminilive.controller.AiState
 import trucker.geminilive.controller.CoPilotController
 import trucker.geminilive.controller.CopilotUiState
-import trucker.geminilive.network.GeminiRestClient
 import trucker.geminilive.startup.StartupReadinessManager
 
 class GeminiViewModel(application: Application) : AndroidViewModel(application) {
@@ -20,14 +19,12 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
     private val sttManager = SttManager(application)
     private val ttsManager = TtsManager(application)
     private var closeAppCallback: (() -> Unit)? = null
-    private val geminiClient = GeminiRestClient()
 
-    // Controller
+    // Controller (VertexAiClient is created internally)
     private val controller = CoPilotController(
         context = application,
         sttManager = sttManager,
         ttsManager = ttsManager,
-        geminiClient = geminiClient,
         onCloseAppRequested = {
             closeAppCallback?.invoke()
         }

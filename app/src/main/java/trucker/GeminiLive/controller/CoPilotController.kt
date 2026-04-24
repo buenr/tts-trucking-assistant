@@ -2,6 +2,7 @@ package trucker.geminilive.controller
 
 import android.content.Context
 import android.util.Log
+import com.google.genai.types.Content
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,11 +21,12 @@ class CoPilotController(
     context: Context,
     private val sttManager: SttManager,
     private val ttsManager: TtsManager,
-    private val geminiClient: GeminiRestClient,
     private val onCloseAppRequested: () -> Unit = {}
 ) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    private val vertexAiClient = VertexAiClient(appContext)
 
     private val _uiState = MutableStateFlow(CopilotUiState())
     val uiState: StateFlow<CopilotUiState> = _uiState
@@ -35,7 +37,8 @@ class CoPilotController(
     private val _partialText = MutableStateFlow("")
     val partialText: StateFlow<String> = _partialText
 
-    private var interactionId: String? = null
+    // Conversation history for multi-turn context
+    private val conversationHistory = mutableListOf<Content>()
     private var processingJob: Job? = null
     private var isActive = false
     private var shouldCloseAppAfterTts = false
@@ -96,7 +99,7 @@ class CoPilotController(
     fun start() {
         if (isActive) return
         isActive = true
-        interactionId = null
+        conversationHistory.clear()
         shouldCloseAppAfterTts = false
         _logs.value = emptyList()
         _partialText.value = ""
@@ -120,7 +123,7 @@ class CoPilotController(
         processingJob?.cancel()
         sttManager.stopListening()
         ttsManager.stop()
-        interactionId = null
+        conversationHistory.clear()
         updateUi {
             it.copy(
                 isConnected = false,
@@ -180,14 +183,13 @@ class CoPilotController(
             transitionTo(AiState.CHECKING_DATA)
 
             try {
-                val apiKey = VertexAuth.getApiKey(appContext)
                 var streamingStarted = false
                 val partialTextBuffer = StringBuilder()
+                val currentHistory = conversationHistory.toList()
 
-                val response = geminiClient.sendMessageStream(
+                val response = vertexAiClient.sendMessageStream(
                     textInput = text,
-                    apiKey = apiKey,
-                    previousInteractionId = interactionId
+                    history = currentHistory
                 ) { deltaText ->
                     synchronized(partialTextBuffer) {
                         partialTextBuffer.append(deltaText)
@@ -199,10 +201,10 @@ class CoPilotController(
                             streamingStarted = true
                             val firstChunk = buffered.trim()
                             partialTextBuffer.clear()
-                            speakSessionId = interactionId ?: "session_${System.currentTimeMillis()}"
+                            speakSessionId = "session_${System.currentTimeMillis()}"
 
                             scope.launch {
-                                addLog("Gemini streaming: ${firstChunk.take(80)}...")
+                                addLog("Vertex AI streaming: ${firstChunk.take(80)}...")
                                 transitionTo(AiState.SPEAKING)
                                 ttsManager.streamText(firstChunk, speakSessionId)
                             }
@@ -219,24 +221,27 @@ class CoPilotController(
 
                 // Flush any remaining buffered text in TtsManager
                 if (!streamingStarted) {
-                    speakSessionId = interactionId ?: "session_${System.currentTimeMillis()}"
+                    speakSessionId = "session_${System.currentTimeMillis()}"
                     transitionTo(AiState.SPEAKING)
                 }
                 ttsManager.flushStreamBuffer(speakSessionId)
+
+                // Add user message to history
+                conversationHistory.add(Content.fromText(text))
 
                 if (!streamingStarted) {
                     // No streaming text received at all
                     handleResponse(response)
                 } else {
-                    // Streaming handled text; parse final response for interaction ID and tool calls
+                    // Streaming handled text; parse final response
                     when (response) {
                         is GeminiResponse.Text -> {
-                            interactionId = response.interactionId
-                            addLog("Interaction completed: ${response.interactionId}")
+                            // Add assistant response to history
+                            conversationHistory.add(Content.fromText(response.text))
+                            addLog("Response completed")
                             // TTS completion callback will resume listening
                         }
                         is GeminiResponse.NeedsFunctionCall -> {
-                            interactionId = response.interactionId
                             handleToolCalls(response)
                         }
                         is GeminiResponse.Error -> {
@@ -264,11 +269,10 @@ class CoPilotController(
     private fun handleResponse(response: GeminiResponse) {
         when (response) {
             is GeminiResponse.Text -> {
-                interactionId = response.interactionId
                 if (response.text.isNotBlank()) {
-                    addLog("Gemini: ${response.text.take(100)}...")
+                    addLog("Vertex AI: ${response.text.take(100)}...")
                     updateUi { it.copy(geminiText = response.text) }
-                    speakSessionId = interactionId ?: "session_${System.currentTimeMillis()}"
+                    speakSessionId = "session_${System.currentTimeMillis()}"
                     transitionTo(AiState.SPEAKING)
                     ttsManager.speak(response.text, speakSessionId)
                 } else {
@@ -276,7 +280,6 @@ class CoPilotController(
                 }
             }
             is GeminiResponse.NeedsFunctionCall -> {
-                interactionId = response.interactionId
                 handleToolCalls(response)
             }
             is GeminiResponse.Error -> {
@@ -308,9 +311,7 @@ class CoPilotController(
 
         scope.launch {
             try {
-                val apiKey = VertexAuth.getApiKey(appContext)
-
-                // Execute tool calls in the controller, not the REST client
+                // Execute tool calls in the controller
                 val functionResults = response.calls.map { call ->
                     val args = call.args?.jsonObject?.mapValues { it.value }
                     val result = TruckingTools.handleToolCall(call.name, args)
@@ -321,19 +322,34 @@ class CoPilotController(
                     )
                 }
 
-                val finalResponse = geminiClient.sendFunctionResults(
+                // Add function call to history
+                val functionCallContent = Content.fromParts(
+                    response.calls.map { call ->
+                        com.google.genai.types.Part.fromFunctionCall(
+                            com.google.genai.types.FunctionCall.builder()
+                                .id(call.id)
+                                .name(call.name)
+                                .args(call.args?.jsonObject?.mapValues { it.value.toString() } ?: emptyMap())
+                                .build()
+                        )
+                    }
+                )
+                conversationHistory.add(functionCallContent)
+
+                val currentHistory = conversationHistory.toList()
+                val finalResponse = vertexAiClient.sendFunctionResults(
                     functionResults = functionResults,
-                    apiKey = apiKey,
-                    previousInteractionId = response.interactionId
+                    history = currentHistory
                 )
 
                 when (finalResponse) {
                     is GeminiResponse.Text -> {
-                        interactionId = finalResponse.interactionId
                         if (finalResponse.text.isNotBlank()) {
-                            addLog("Gemini: ${finalResponse.text.take(100)}...")
+                            addLog("Vertex AI: ${finalResponse.text.take(100)}...")
                             updateUi { it.copy(geminiText = finalResponse.text, currentTool = "") }
-                            speakSessionId = interactionId ?: "session_${System.currentTimeMillis()}"
+                            // Add assistant response to history
+                            conversationHistory.add(Content.fromText(finalResponse.text))
+                            speakSessionId = "session_${System.currentTimeMillis()}"
                             transitionTo(AiState.SPEAKING)
                             ttsManager.speak(finalResponse.text, speakSessionId)
                         } else {
