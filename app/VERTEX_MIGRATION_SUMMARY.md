@@ -11,9 +11,11 @@ Successfully migrated the TTS Trucking Assistant app from Gemini Interactions AP
 
 ### 2. Authentication
 - **Before**: API key via `secrets.properties` → `BuildConfig.GEMINI_API_KEY`
-- **After**: Service account JSON key (`vertex-ai-key.json`) in `app/src/main/assets/`
+- **After**: Application Default Credentials (ADC) with automatic fallback to service account JSON
+- **Method 1 (ADC)**: Set `GOOGLE_APPLICATION_CREDENTIALS` environment variable to service account JSON path
+- **Method 2 (Assets)**: Place `vertex-ai-testing1.json` in `app/src/main/assets/`
 - **Location**: `global` (automatic routing to available regions)
-- **Model**: `gemini-3-flash-preview`
+- **Model**: `gemini-2.5-flash`
 
 ### 3. API Client Architecture
 - **Before**: `GeminiRestClient` using OkHttp + Interactions API (`/interactions` endpoint)
@@ -42,21 +44,36 @@ Successfully migrated the TTS Trucking Assistant app from Gemini Interactions AP
 
 ## Setup Instructions
 
+### Option 1: Application Default Credentials (ADC) - Recommended
+
 1. **Download service account JSON** from Google Cloud Console:
    - Navigate to: APIs & Services > Credentials > Service Accounts
    - Create or select existing service account
    - Generate JSON key
-   - Rename to `vertex-ai-key.json`
 
-2. **Place file in assets**:
+2. **Set environment variable**:
+   ```bash
+   export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
+   ```
+
+### Option 2: Service Account in Assets (Fallback)
+
+1. **Download service account JSON** from Google Cloud Console
+2. **Rename to `vertex-ai-testing1.json`**
+3. **Place file in assets**:
+   ```
+   app/src/main/assets/vertex-ai-testing1.json
+   ```
+4. **Add to `.gitignore`**:
    ```
    app/src/main/assets/vertex-ai-testing1.json
    ```
 
-3. **Enable Vertex AI API** in your Google Cloud project
+### Required Permissions
 
-4. **Ensure service account has permissions**:
-   - `aiplatform.user` or `aiplatform.admin`
+- **Enable Vertex AI API** in your Google Cloud project
+- **Ensure service account has permissions**:
+  - `aiplatform.user` or `aiplatform.admin`
 
 ## API Differences
 
@@ -109,5 +126,7 @@ client.models.generateContent(
 ## Notes
 
 - The app now requires Google Cloud project with Vertex AI enabled
+- **ADC (Application Default Credentials)** is the recommended approach for production
+- ADC is automatically detected - no code changes needed when using environment variables
 - Service account JSON should be kept secure and NOT committed to version control
-- Consider adding `vertex-ai-testing1.json` to `.gitignore`
+- The app will automatically fall back to assets if ADC is not configured

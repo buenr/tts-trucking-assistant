@@ -23,15 +23,13 @@ class VertexAiClient(private val context: Context) {
     private suspend fun getClient(): Client {
         if (client == null) {
             val projectId = VertexAuth.getProjectId(context)
-            val accessToken = VertexAuth.getAccessToken(context)
+            val credentials = VertexAuth.getCredentials(context)
 
             client = Client.builder()
-                .vertexAi(true)
+                .vertexAI(true)
                 .project(projectId)
                 .location(VertexAuth.LOCATION)
-                .credentials(com.google.auth.oauth2.GoogleCredentials.create(
-                    com.google.auth.oauth2.AccessToken(accessToken, null)
-                ))
+                .credentials(credentials)
                 .build()
         }
         return client!!
@@ -76,36 +74,36 @@ class VertexAiClient(private val context: Context) {
             val accumulatedText = StringBuilder()
             val functionCalls = mutableListOf<FunctionCallData>()
 
-            client.models.generateContentStream(VertexAuth.MODEL, contents, buildConfig())
-                .collect { chunk ->
-                    val text = chunk.text()
-                    if (!text.isNullOrBlank()) {
-                        val sanitized = GeminiResponse.sanitizeTextForTts(text)
-                        accumulatedText.append(sanitized)
-                        onDelta(sanitized)
-                    }
+            val responseStream = client.models.generateContentStream(VertexAuth.MODEL, contents, buildConfig())
+            for (chunk in responseStream) {
+                val text = chunk.text()
+                if (!text.isNullOrBlank()) {
+                    val sanitized = GeminiResponse.sanitizeTextForTts(text)
+                    accumulatedText.append(sanitized)
+                    onDelta(sanitized)
+                }
 
-                    // Check for function calls in the chunk
-                    chunk.functionCalls()?.forEach { funcCall ->
-                        functionCalls.add(FunctionCallData(
-                            id = funcCall.id ?: UUID.randomUUID().toString(),
-                            name = funcCall.name ?: "",
-                            args = funcCall.args?.let { argsMap ->
-                                val jsonObject = buildJsonObject {
-                                    argsMap.forEach { (key, value) ->
-                                        when (value) {
-                                            is String -> put(key, value)
-                                            is Number -> put(key, value)
-                                            is Boolean -> put(key, value)
-                                            else -> put(key, value.toString())
-                                        }
+                // Check for function calls in the chunk
+                chunk.functionCalls()?.forEach { funcCall ->
+                    functionCalls.add(FunctionCallData(
+                        id = funcCall.id().orElse(UUID.randomUUID().toString()),
+                        name = funcCall.name().orElse(""),
+                        args = funcCall.args().orElse(null)?.let { argsMap ->
+                            val jsonObject = buildJsonObject {
+                                argsMap.forEach { (key, value) ->
+                                    when (value) {
+                                        is String -> put(key, value)
+                                        is Number -> put(key, value)
+                                        is Boolean -> put(key, value)
+                                        else -> put(key, value.toString())
                                     }
                                 }
-                                Json.encodeToJsonElement(jsonObject)
                             }
-                        ))
-                    }
+                            Json.encodeToJsonElement(jsonObject)
+                        }
+                    ))
                 }
+            }
 
             return if (functionCalls.isNotEmpty()) {
                 GeminiResponse.NeedsFunctionCall(functionCalls, "")
@@ -131,17 +129,16 @@ class VertexAiClient(private val context: Context) {
             // Build contents with function results as tool responses
             val contents = buildList {
                 addAll(history)
-                add(Content.fromParts(
-                    functionResults.map { result ->
-                        Part.fromFunctionResponse(
-                            FunctionResponse.builder()
-                                .id(result.callId)
-                                .name(result.name)
-                                .response(result.result.toString())
-                                .build()
-                        )
-                    }
-                ))
+                val parts = functionResults.map { result ->
+                    Part.builder().functionResponse(
+                        FunctionResponse.builder()
+                            .id(result.callId)
+                            .name(result.name)
+                            .response(mapOf("output" to result.result.toString()))
+                            .build()
+                    ).build()
+                }
+                add(Content.fromParts(*parts.toTypedArray()))
             }
 
             val response = client.models.generateContent(
@@ -163,7 +160,7 @@ class VertexAiClient(private val context: Context) {
             // (Gen AI SDK handles system instructions differently, we'll include it in config)
 
             addAll(history)
-            add(Content.fromText(newText))
+            add(Content.fromParts(Part.fromText(newText)))
         }
     }
 
@@ -171,8 +168,8 @@ class VertexAiClient(private val context: Context) {
         val tools = TruckingTools.getVertexTools()
 
         return GenerateContentConfig.builder()
-            .systemInstruction(SYSTEM_INSTRUCTION)
-            .temperature(0.2)
+            .systemInstruction(Content.fromParts(Part.fromText(SYSTEM_INSTRUCTION)))
+            .temperature(0.2f)
             .maxOutputTokens(512)
             .tools(tools)
             .build()
@@ -185,9 +182,9 @@ class VertexAiClient(private val context: Context) {
         return if (!functionCalls.isNullOrEmpty()) {
             val calls = functionCalls.map { funcCall ->
                 FunctionCallData(
-                    id = funcCall.id ?: UUID.randomUUID().toString(),
-                    name = funcCall.name ?: "",
-                    args = funcCall.args?.let { argsMap ->
+                    id = funcCall.id().orElse(UUID.randomUUID().toString()),
+                    name = funcCall.name().orElse(""),
+                    args = funcCall.args().orElse(null)?.let { argsMap ->
                         val jsonObject = buildJsonObject {
                             argsMap.forEach { (key, value) ->
                                 when (value) {
@@ -209,7 +206,7 @@ class VertexAiClient(private val context: Context) {
     }
 
     companion object {
-        private const val SYSTEM_INSTRUCTION = """
+        private val SYSTEM_INSTRUCTION = """
             # PERSONA
             You are a Knight-Swift Transportation trucking in-cab copilot (AI Assistant) on their tablet. Your responses will be spoken aloud via text-to-speech (TTS) to the driver. Speak in very short, direct sentences. Directly address only the driver's question, don't add much extra information from the tool call result. Use concise, operational language familiar to truck drivers. Always try to keep it simple in your responses.
 

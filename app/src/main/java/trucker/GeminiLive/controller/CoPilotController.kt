@@ -3,6 +3,8 @@ package trucker.geminilive.controller
 import android.content.Context
 import android.util.Log
 import com.google.genai.types.Content
+import com.google.genai.types.Part
+import com.google.genai.types.FunctionCall
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -10,7 +12,7 @@ import trucker.geminilive.audio.SttManager
 import trucker.geminilive.audio.TtsManager
 import trucker.geminilive.network.*
 import trucker.geminilive.tools.TruckingTools
-import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.*
 
 /**
  * Co-Pilot Logic Controller.
@@ -227,7 +229,7 @@ class CoPilotController(
                 ttsManager.flushStreamBuffer(speakSessionId)
 
                 // Add user message to history
-                conversationHistory.add(Content.fromText(text))
+                conversationHistory.add(Content.fromParts(Part.fromText(text)))
 
                 if (!streamingStarted) {
                     // No streaming text received at all
@@ -237,7 +239,7 @@ class CoPilotController(
                     when (response) {
                         is GeminiResponse.Text -> {
                             // Add assistant response to history
-                            conversationHistory.add(Content.fromText(response.text))
+                            conversationHistory.add(Content.fromParts(Part.fromText(response.text)))
                             addLog("Response completed")
                             // TTS completion callback will resume listening
                         }
@@ -323,18 +325,24 @@ class CoPilotController(
                 }
 
                 // Add function call to history
-                val functionCallContent = Content.fromParts(
-                    response.calls.map { call ->
-                        com.google.genai.types.Part.fromFunctionCall(
-                            com.google.genai.types.FunctionCall.builder()
-                                .id(call.id)
-                                .name(call.name)
-                                .args(call.args?.jsonObject?.mapValues { it.value.toString() } ?: emptyMap())
-                                .build()
-                        )
-                    }
-                )
-                conversationHistory.add(functionCallContent)
+                val parts = response.calls.map { call ->
+                    val argsMap = call.args?.jsonObject?.mapValues { entry ->
+                        val value = entry.value
+                        if (value is JsonPrimitive) {
+                            if (value.isString) value.content
+                            else value.toString()
+                        } else value.toString()
+                    } ?: emptyMap<String, Any>()
+
+                    Part.builder().functionCall(
+                        FunctionCall.builder()
+                            .id(call.id)
+                            .name(call.name)
+                            .args(argsMap)
+                            .build()
+                    ).build()
+                }
+                conversationHistory.add(Content.fromParts(*parts.toTypedArray()))
 
                 val currentHistory = conversationHistory.toList()
                 val finalResponse = vertexAiClient.sendFunctionResults(
@@ -348,7 +356,7 @@ class CoPilotController(
                             addLog("Vertex AI: ${finalResponse.text.take(100)}...")
                             updateUi { it.copy(geminiText = finalResponse.text, currentTool = "") }
                             // Add assistant response to history
-                            conversationHistory.add(Content.fromText(finalResponse.text))
+                            conversationHistory.add(Content.fromParts(Part.fromText(finalResponse.text)))
                             speakSessionId = "session_${System.currentTimeMillis()}"
                             transitionTo(AiState.SPEAKING)
                             ttsManager.speak(finalResponse.text, speakSessionId)
