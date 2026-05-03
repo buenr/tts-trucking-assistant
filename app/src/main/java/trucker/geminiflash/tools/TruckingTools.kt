@@ -143,7 +143,7 @@ object TruckingTools {
                         put("tenure_years", 6)
                     })
                     put("location", buildJsonObject {
-                        put("as_of", "2026-04-15T14:20")
+                        put("as_of", "2026-05-15T14:20")
                         put("nearest_city", "Flagstaff, AZ")
                         put("corridor", "I-40 EB")
                     })
@@ -159,7 +159,7 @@ object TruckingTools {
                         put("duty_time_remaining", "8h 45m")
                         put("cycle_hours_remaining", "18h 45m")
                         put("next_break_due_in", "2h 30m")
-                        put("next_30m_break_due_by", "2026-04-15T17:05")
+                        put("next_30m_break_due_by", "2026-05-15T17:05")
                     })
                     put("safety_score", buildJsonObject {
                         put("current_score", 945)
@@ -168,7 +168,7 @@ object TruckingTools {
                         put("recent_events", buildJsonArray {
                             add(buildJsonObject {
                                 put("event_type", "Hard Braking")
-                                put("date", "2026-04-14")
+                                put("date", "2026-05-14")
                                 put("location", "I-40 near Kingman, AZ")
                                 put("severity", "Moderate")
                                 put("impact_on_score", "-3 pts")
@@ -190,7 +190,7 @@ object TruckingTools {
                     })
                     put("medical_card_renewal", buildJsonObject {
                         put("expires_on", "2026-12-14")
-                        put("days_until_expiry", 243)
+                        put("days_until_expiry", 213)
                         put("reminder_scheduled", true)
                         put("next_reminder_date", "2026-09-15")
                         put("renewal_window_opens", "2026-10-14")
@@ -221,15 +221,15 @@ object TruckingTools {
                         })
                         put("origin", "Reno, NV")
                         put("destination", "Dallas, TX")
-                        put("next_stop_eta", "2026-04-15T19:40")
+                        put("next_stop_eta", "2026-05-15T19:40")
                         put("stops", buildJsonArray {
                             add(buildJsonObject {
                                 put("stop_index", 1)
                                 put("type", "pickup")
                                 put("facility", "Silver State Distribution")
                                 put("city", "Reno, NV")
-                                put("appointment", "2026-04-14T09:00")
-                                put("arrival_time", "2026-04-14T08:45")
+                                put("appointment", "2026-05-14T09:00")
+                                put("arrival_time", "2026-05-14T08:45")
                                 put("status", "completed")
                             })
                             add(buildJsonObject {
@@ -237,8 +237,8 @@ object TruckingTools {
                                 put("type", "fuel")
                                 put("facility", "Swift Fuel Network #AZ-17")
                                 put("city", "Flagstaff, AZ")
-                                put("appointment", "2026-04-15T19:30")
-                                put("arrival", "2026-04-15T19:40")
+                                put("appointment", "2026-05-15T19:30")
+                                put("arrival", "2026-05-15T19:40")
                                 put("status", "in_progress")
                                 put("risk", "minor_delay_10m")
                             })
@@ -247,7 +247,7 @@ object TruckingTools {
                                 put("type", "delivery")
                                 put("facility", "DFW Retail Crossdock")
                                 put("city", "Dallas, TX")
-                                put("appointment", "2026-04-16T13:00")
+                                put("appointment", "2026-05-16T13:00")
                                 put("status", "pending")
                                 put("risk", "tight_eta_due_to_i40_winds")
                             })
@@ -276,8 +276,8 @@ object TruckingTools {
                         })
                         put("origin", "Dallas, TX")
                         put("destination", "Atlanta, GA")
-                        put("pickup_window", "2026-04-16T15:00 to 2026-04-16T19:00")
-                        put("delivery_window", "2026-04-18T08:00 to 2026-04-18T12:00")
+                        put("pickup_window", "2026-05-16T15:00 to 2026-05-16T19:00")
+                        put("delivery_window", "2026-05-18T08:00 to 2026-05-18T12:00")
                         put("total_miles", 780)
                         put("equipment_required", "53ft Dry Van")
                         put("notes", "High value load, no unauthorized stops. Preload available at Dallas yard.")
@@ -290,8 +290,8 @@ object TruckingTools {
                 when (period) {
                     "current" -> buildJsonObject {
                         put("driver_id", DEMO_DRIVER_ID)
-                        put("pay_period", "2026-03-28 to 2026-04-10")
-                        put("pay_date", "2026-04-11")
+                        put("pay_period", "2026-04-28 to 2026-05-10")
+                        put("pay_date", "2026-05-11")
                         put("base_pay", buildJsonObject {
                             put("miles_paid", 2850)
                             put("cpm_rate", 0.52)
@@ -302,13 +302,13 @@ object TruckingTools {
                                 put("type", "Layover")
                                 put("amount", 150.00)
                                 put("reason", "Weather delay in Flagstaff")
-                                put("date", "2026-04-05")
+                                put("date", "2026-05-05")
                             })
                             add(buildJsonObject {
                                 put("type", "Detention")
                                 put("amount", 75.00)
                                 put("reason", "Shipper delay - Reno")
-                                put("date", "2026-04-02")
+                                put("date", "2026-05-02")
                             })
                         })
                         put("deductions", buildJsonArray {
@@ -333,11 +333,11 @@ object TruckingTools {
                         put("current_quarter", "Q2 2026")
                         put("monthly_safety_class", buildJsonObject {
                             put("required", true)
-                            put("month", "April 2026")
+                            put("month", "May 2026")
                             put("title", "Defensive Driving Techniques")
-                            put("deadline", "2026-04-30")
+                            put("deadline", "2026-05-30")
                             put("status", "completed")
-                            put("completion_date", "2026-04-15")
+                            put("completion_date", "2026-05-15")
                             put("bonus_amount", 150.00)
                         })
                         put("quarterly_bonus_status", buildJsonObject {
@@ -359,7 +359,7 @@ object TruckingTools {
                 buildJsonObject {
                     put("driver_id", DEMO_DRIVER_ID)
                     put("time_horizon", "1 hour")
-                    put("generated_at", "2026-04-15T14:20")
+                    put("generated_at", "2026-05-15T14:20")
                     put("conditions", buildJsonArray {
                         add(buildJsonObject {
                             put("type", "weather")
@@ -403,7 +403,7 @@ object TruckingTools {
                             put("priority", "high")
                             put("subject", "Delivery gate code updated")
                             put("body", "DFW Retail Crossdock gate code is now 4729#. Confirm receipt.")
-                            put("created_at", "2026-04-15T13:55")
+                            put("created_at", "2026-05-15T13:55")
                         })
                         add(buildJsonObject {
                             put("message_id", "DSP-77088")
@@ -411,7 +411,7 @@ object TruckingTools {
                             put("priority", "normal")
                             put("subject", "Fuel stop preference")
                             put("body", "Use Swift Fuel Network #AZ-17 when practical.")
-                            put("created_at", "2026-04-15T09:10")
+                            put("created_at", "2026-05-15T09:10")
                         })
                     }
                     val filteredMessages = if (unreadOnly) {
@@ -461,7 +461,7 @@ object TruckingTools {
                 when (category) {
                     "policies" -> buildJsonObject {
                         put("company", "Swift Transportation")
-                        put("last_updated", "2026-04-10")
+                        put("last_updated", "2026-05-10")
                         put("categories", buildJsonArray {
                             add(buildJsonObject {
                                 put("category", "Pet Policy")
@@ -508,7 +508,7 @@ object TruckingTools {
                                 put("type", "video")
                                 put("duration_minutes", 25)
                                 put("status", "completed")
-                                put("completion_date", "2026-04-15")
+                                put("completion_date", "2026-05-15")
                                 put("link", "https://swiftuniversity.com/modules/safe-001")
                             })
                             add(buildJsonObject {
@@ -541,13 +541,13 @@ object TruckingTools {
                                 put("category", "HOS")
                                 put("severity", "warning")
                                 put("message", "11-hour drive limit projected in 5h 15m.")
-                                put("due_by", "2026-04-15T20:05")
+                                put("due_by", "2026-05-15T20:05")
                             })
                         })
                     })
                     put("medical_card_status", buildJsonObject {
                         put("expires_on", "2026-12-14")
-                        put("days_until_expiry", 243)
+                        put("days_until_expiry", 213)
                         put("reminder_scheduled", true)
                         put("next_reminder_date", "2026-09-15")
                         put("renewal_window_opens", "2026-10-14")
@@ -557,7 +557,7 @@ object TruckingTools {
                     put("annual_inspection", buildJsonObject {
                         put("last_inspection_date", "2025-12-15")
                         put("next_inspection_due", "2026-12-15")
-                        put("days_until_due", 244)
+                        put("days_until_due", 214)
                     })
                 }
             }

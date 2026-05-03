@@ -16,9 +16,10 @@ class TtsManager(context: Context) {
     private var tts: TextToSpeech? = null
     private var isInitialized = false
     private var onSpeakComplete: (() -> Unit)? = null
-    private val pendingSentences = ConcurrentLinkedQueue<String>()
+    private val pendingSentences = ConcurrentLinkedQueue<TtsQueueItem>()
     private var isSpeaking = false
     private var currentSessionId: String? = null
+    private var hasFinalAudioInCurrentDrain = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     // Offline voice enforcement
@@ -110,10 +111,25 @@ class TtsManager(context: Context) {
         if (sessionId != null) {
             currentSessionId = sessionId
         }
-        pendingSentences.add(text.trim())
+        pendingSentences.add(TtsQueueItem(text.trim(), TtsQueueItem.Kind.FINAL_RESPONSE))
         if (!isSpeaking) {
             processNextSentence()
         }
+    }
+
+    /**
+     * Queue a short non-final status cue. Completion of these cues must not resume listening.
+     */
+    fun speakStatusCue(text: String) {
+        if (text.isBlank()) return
+        pendingSentences.add(TtsQueueItem(text.trim(), TtsQueueItem.Kind.STATUS_CUE))
+        if (!isSpeaking) {
+            processNextSentence()
+        }
+    }
+
+    fun clearStatusCues() {
+        pendingSentences.removeIf { it.kind == TtsQueueItem.Kind.STATUS_CUE }
     }
 
     /**
@@ -141,7 +157,7 @@ class TtsManager(context: Context) {
                 val chunk = streamBuffer.substring(0, flushIndex + 1).trim()
                 streamBuffer.delete(0, flushIndex + 1)
                 if (chunk.isNotBlank()) {
-                    pendingSentences.add(chunk)
+                    pendingSentences.add(TtsQueueItem(chunk, TtsQueueItem.Kind.FINAL_RESPONSE))
                 }
             }
         }
@@ -163,7 +179,7 @@ class TtsManager(context: Context) {
                 val chunk = streamBuffer.toString().trim()
                 streamBuffer.clear()
                 if (chunk.isNotBlank()) {
-                    pendingSentences.add(chunk)
+                    pendingSentences.add(TtsQueueItem(chunk, TtsQueueItem.Kind.FINAL_RESPONSE))
                 }
             }
         }
@@ -178,15 +194,21 @@ class TtsManager(context: Context) {
             return
         }
 
-        val sentence = pendingSentences.poll()
-        if (sentence == null) {
+        val item = pendingSentences.poll()
+        if (item == null) {
             isSpeaking = false
             currentSessionId = null
-            onSpeakComplete?.invoke()
+            if (hasFinalAudioInCurrentDrain) {
+                hasFinalAudioInCurrentDrain = false
+                onSpeakComplete?.invoke()
+            }
             return
         }
 
         isSpeaking = true
+        if (item.kind == TtsQueueItem.Kind.FINAL_RESPONSE) {
+            hasFinalAudioInCurrentDrain = true
+        }
 
         // Request audio focus with ducking so music/GPS quiets while speaking
         val result = audioManager.requestAudioFocus(
@@ -199,13 +221,14 @@ class TtsManager(context: Context) {
         }
 
         val utteranceId = "utterance_${System.currentTimeMillis()}"
-        tts?.speak(sentence, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        tts?.speak(item.text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
     }
 
     fun stop() {
         tts?.stop()
         isSpeaking = false
         currentSessionId = null
+        hasFinalAudioInCurrentDrain = false
         pendingSentences.clear()
         synchronized(streamBuffer) {
             streamBuffer.clear()
@@ -219,5 +242,15 @@ class TtsManager(context: Context) {
         tts?.shutdown()
         tts = null
         isInitialized = false
+    }
+
+    private data class TtsQueueItem(
+        val text: String,
+        val kind: Kind
+    ) {
+        enum class Kind {
+            FINAL_RESPONSE,
+            STATUS_CUE
+        }
     }
 }
