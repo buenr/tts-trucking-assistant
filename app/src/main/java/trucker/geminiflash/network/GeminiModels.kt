@@ -1,4 +1,4 @@
-package trucker.geminilive.network
+package trucker.geminiflash.network
 
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable

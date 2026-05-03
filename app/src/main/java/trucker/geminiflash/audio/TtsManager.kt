@@ -1,4 +1,4 @@
-package trucker.geminilive.audio
+package trucker.geminiflash.audio
 
 import android.content.Context
 import android.media.AudioManager

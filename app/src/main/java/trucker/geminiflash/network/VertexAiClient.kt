@@ -1,4 +1,4 @@
-package trucker.geminilive.network
+package trucker.geminiflash.network
 
 import android.content.Context
 import android.util.Log
@@ -10,8 +10,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.json.*
-import trucker.geminilive.BuildConfig
-import trucker.geminilive.tools.TruckingTools
+import trucker.geminiflash.BuildConfig
+import trucker.geminiflash.tools.TruckingTools
 import java.util.UUID
 
 /**

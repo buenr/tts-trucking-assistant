@@ -1,16 +1,16 @@
-package trucker.geminilive.network
+package trucker.geminiflash.network
 
 import android.content.Context
 import android.util.Log
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.auth.oauth2.AccessToken
 import com.google.auth.oauth2.GoogleCredentials
-import trucker.geminilive.BuildConfig
+import trucker.geminiflash.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import trucker.geminilive.security.EncryptedCredentialStore
+import trucker.geminiflash.security.EncryptedCredentialStore
 import java.io.ByteArrayInputStream
 import java.util.Date
 

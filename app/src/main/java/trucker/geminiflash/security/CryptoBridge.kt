@@ -1,6 +1,6 @@
-package trucker.geminilive.security
+package trucker.geminiflash.security
 
-import trucker.geminilive.BuildConfig
+import trucker.geminiflash.BuildConfig
 
 /**
  * JNI bridge to native encryption/decryption.

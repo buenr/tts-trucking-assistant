@@ -1,4 +1,4 @@
-package trucker.geminilive
+package trucker.geminiflash
 
 import android.content.Context
 import kotlinx.coroutines.runBlocking
@@ -7,9 +7,9 @@ import org.junit.Test
 import org.junit.Assert.*
 import org.mockito.Mock
 import org.mockito.MockitoAnnotations
-import trucker.geminilive.network.VertexAiClient
-import trucker.geminilive.network.GeminiResponse
-import trucker.geminilive.tools.TruckingTools
+import trucker.geminiflash.network.VertexAiClient
+import trucker.geminiflash.network.GeminiResponse
+import trucker.geminiflash.tools.TruckingTools
 
 /**
  * Integration test for Vertex AI Gemini API with trucking tools.

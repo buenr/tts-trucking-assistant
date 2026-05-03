@@ -1,7 +1,7 @@
-package trucker.geminilive.tools
+package trucker.geminiflash.tools
 
-import trucker.geminilive.network.FunctionDeclaration
-import trucker.geminilive.network.Schema
+import trucker.geminiflash.network.FunctionDeclaration
+import trucker.geminiflash.network.Schema
 import kotlinx.serialization.json.*
 
 object TruckingTools {

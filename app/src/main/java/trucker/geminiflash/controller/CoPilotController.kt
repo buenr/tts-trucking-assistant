@@ -1,4 +1,4 @@
-package trucker.geminilive.controller
+package trucker.geminiflash.controller
 
 import android.content.Context
 import android.util.Log
@@ -8,10 +8,10 @@ import com.google.genai.types.FunctionCall
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import trucker.geminilive.audio.SttManager
-import trucker.geminilive.audio.TtsManager
-import trucker.geminilive.network.*
-import trucker.geminilive.tools.TruckingTools
+import trucker.geminiflash.audio.SttManager
+import trucker.geminiflash.audio.TtsManager
+import trucker.geminiflash.network.*
+import trucker.geminiflash.tools.TruckingTools
 import kotlinx.serialization.json.*
 
 /**

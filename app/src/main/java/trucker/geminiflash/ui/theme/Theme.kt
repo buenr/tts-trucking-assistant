@@ -1,4 +1,4 @@
-package trucker.geminilive.ui.theme
+package trucker.geminiflash.ui.theme
 
 import android.app.Activity
 import android.os.Build

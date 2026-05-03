@@ -1,4 +1,4 @@
-package trucker.geminilive.network
+package trucker.geminiflash.network
 
 import android.content.Context
 import android.util.Log
@@ -11,7 +11,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import trucker.geminilive.BuildConfig
+import trucker.geminiflash.BuildConfig
 import java.io.ByteArrayInputStream
 
 /**

@@ -1,8 +1,8 @@
-package trucker.geminilive.security
+package trucker.geminiflash.security
 
 import android.content.Context
 import android.util.Log
-import trucker.geminilive.BuildConfig
+import trucker.geminiflash.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream

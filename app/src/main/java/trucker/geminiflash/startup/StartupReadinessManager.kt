@@ -1,4 +1,4 @@
-package trucker.geminilive.startup
+package trucker.geminiflash.startup
 
 import android.content.Context
 import android.content.pm.PackageManager
@@ -8,7 +8,7 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import trucker.geminilive.network.VertexAuth
+import trucker.geminiflash.network.VertexAuth
 import java.util.Locale
 import kotlin.coroutines.resume
 

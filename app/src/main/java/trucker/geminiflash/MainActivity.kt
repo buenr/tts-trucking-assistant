@@ -1,4 +1,4 @@
-package trucker.geminilive
+package trucker.geminiflash
 
 import android.Manifest
 import android.app.Activity
@@ -36,9 +36,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import trucker.geminilive.controller.AiState
-import trucker.geminilive.startup.StartupReadinessManager
-import trucker.geminilive.ui.theme.MyApplicationTheme
+import trucker.geminiflash.controller.AiState
+import trucker.geminiflash.startup.StartupReadinessManager
+import trucker.geminiflash.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -408,7 +408,7 @@ fun StateIndicator(state: AiState, currentTool: String) {
 }
 
 @Composable
-fun StatusBar(uiState: trucker.geminilive.controller.CopilotUiState) {
+fun StatusBar(uiState: trucker.geminiflash.controller.CopilotUiState) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

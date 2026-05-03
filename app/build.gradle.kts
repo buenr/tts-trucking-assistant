@@ -28,11 +28,11 @@ fun getLocalProperty(key: String, default: String): String {
 // VERTEX_AI_MODEL=gemini-2.5-flash
 
 android {
-    namespace = "trucker.geminilive"
+    namespace = "trucker.geminiflash"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "trucker.geminilive.tts"
+        applicationId = "trucker.geminiflash"
         minSdk = 34
         targetSdk = 35
         versionCode = 1
