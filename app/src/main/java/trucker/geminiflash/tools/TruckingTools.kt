@@ -1,7 +1,7 @@
-package trucker.geminilive.tools
+package trucker.geminiflash.tools
 
-import trucker.geminilive.network.FunctionDeclaration
-import trucker.geminilive.network.Schema
+import trucker.geminiflash.network.FunctionDeclaration
+import trucker.geminiflash.network.Schema
 import kotlinx.serialization.json.*
 
 object TruckingTools {
@@ -87,6 +87,48 @@ object TruckingTools {
                 )
             )
         )
+
+    /**
+     * Convert declarations to Vertex AI Gen AI SDK Tool format.
+     */
+    fun getVertexTools(): List<com.google.genai.types.Tool> {
+        val functionDeclarations = declaration.map { func ->
+            val builder = com.google.genai.types.FunctionDeclaration.builder()
+                .name(func.name)
+            
+            func.description?.let { builder.description(it) }
+            func.parameters?.let { builder.parameters(it.toSdkSchema()) }
+            
+            builder.build()
+        }
+        return listOf(
+            com.google.genai.types.Tool.builder()
+                .functionDeclarations(functionDeclarations)
+                .build()
+        )
+    }
+
+    /**
+     * Convert our Schema to Gen AI SDK Schema format.
+     */
+    private fun Schema.toSdkSchema(): com.google.genai.types.Schema {
+        val builder = com.google.genai.types.Schema.builder()
+        
+        this.type?.let { builder.type(it) }
+        this.description?.let { builder.description(it) }
+
+        this.properties?.let { props ->
+            val sdkProps = props.mapValues { (_, schema) ->
+                schema.toSdkSchema()
+            }
+            builder.properties(sdkProps)
+        }
+
+        this.required?.let { builder.required(it) }
+        this.items?.let { builder.items(it.toSdkSchema()) }
+
+        return builder.build()
+    }
 
     fun handleToolCall(name: String, args: Map<String, JsonElement>?): JsonElement {
         return when (name) {

@@ -1,5 +1,5 @@
 import java.util.Properties
-import java.io.InputStream
+import java.util.Base64
 
 plugins {
     alias(libs.plugins.android.application)
@@ -8,28 +8,49 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-val secretsPropertiesFile = rootProject.file("secrets.properties")
-val secretsProperties = Properties()
-if (secretsPropertiesFile.exists()) {
-    secretsPropertiesFile.inputStream().use { input: InputStream ->
-        secretsProperties.load(input)
+// Load local.properties at the top level
+val localProperties = Properties()
+val localPropertiesFile = project.rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use { stream ->
+        localProperties.load(stream)
     }
 }
-val geminiApiKey: String = secretsProperties.getProperty("GEMINI_API_KEY", "")
+
+fun getLocalProperty(key: String, default: String): String {
+    val value = localProperties.getProperty(key) ?: default
+    return value.trim().removeSurrounding("\"").removeSurrounding("'")
+}
+
+// Note: Configure secrets in local.properties:
+// VERTEX_AI_PROJECT_ID=your-project-id
+// VERTEX_AI_LOCATION=global
+// VERTEX_AI_MODEL=gemini-2.5-flash
 
 android {
-    namespace = "trucker.geminilive"
+    namespace = "trucker.geminiflash"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "trucker.geminilive.tts"
+        applicationId = "trucker.geminiflash"
         minSdk = 34
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
+
+        fun toBase64(value: String): String {
+            return Base64.getEncoder().encodeToString(value.toByteArray())
+        }
+
+        buildConfigField("String", "VERTEX_AI_PROJECT_ID", "\"${getLocalProperty("VERTEX_AI_PROJECT_ID", "")}\"")
+        buildConfigField("String", "VERTEX_AI_LOCATION", "\"${getLocalProperty("VERTEX_AI_LOCATION", "global")}\"")
+        buildConfigField("String", "VERTEX_AI_MODEL", "\"${getLocalProperty("VERTEX_AI_MODEL", "gemini-2.5-flash-preview-04-09")}\"")
+
+        // Encrypted credential store fields (placeholder — auth goes through VertexCredentialsManager/assets)
+        buildConfigField("String", "ENCRYPTED_VERTEX_KEY", "\"${getLocalProperty("ENCRYPTED_VERTEX_KEY", "PLACEHOLDER")}\"")
+        buildConfigField("String", "BUILD_KEY_FRAGMENT", "\"${getLocalProperty("BUILD_KEY_FRAGMENT", "")}\"")
     }
 
     buildTypes {
@@ -68,6 +89,7 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.google.auth.library.oauth2.http)
+    implementation(libs.google.genai)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

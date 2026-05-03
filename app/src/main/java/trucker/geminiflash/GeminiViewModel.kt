@@ -1,4 +1,4 @@
-package trucker.geminilive
+package trucker.geminiflash
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
@@ -6,13 +6,12 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import trucker.geminilive.audio.SttManager
-import trucker.geminilive.audio.TtsManager
-import trucker.geminilive.controller.AiState
-import trucker.geminilive.controller.CoPilotController
-import trucker.geminilive.controller.CopilotUiState
-import trucker.geminilive.network.GeminiRestClient
-import trucker.geminilive.startup.StartupReadinessManager
+import trucker.geminiflash.audio.SttManager
+import trucker.geminiflash.audio.TtsManager
+import trucker.geminiflash.controller.AiState
+import trucker.geminiflash.controller.CoPilotController
+import trucker.geminiflash.controller.CopilotUiState
+import trucker.geminiflash.startup.StartupReadinessManager
 
 class GeminiViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -20,14 +19,12 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
     private val sttManager = SttManager(application)
     private val ttsManager = TtsManager(application)
     private var closeAppCallback: (() -> Unit)? = null
-    private val geminiClient = GeminiRestClient()
 
-    // Controller
+    // Controller (VertexAiClient is created internally)
     private val controller = CoPilotController(
         context = application,
         sttManager = sttManager,
         ttsManager = ttsManager,
-        geminiClient = geminiClient,
         onCloseAppRequested = {
             closeAppCallback?.invoke()
         }

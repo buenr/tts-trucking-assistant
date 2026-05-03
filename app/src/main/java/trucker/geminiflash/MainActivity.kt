@@ -1,4 +1,4 @@
-package trucker.geminilive
+package trucker.geminiflash
 
 import android.Manifest
 import android.app.Activity
@@ -36,9 +36,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import trucker.geminilive.controller.AiState
-import trucker.geminilive.startup.StartupReadinessManager
-import trucker.geminilive.ui.theme.MyApplicationTheme
+import trucker.geminiflash.controller.AiState
+import trucker.geminiflash.startup.StartupReadinessManager
+import trucker.geminiflash.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -143,6 +143,24 @@ fun ReadinessScreen(
     report: StartupReadinessManager.ReadinessReport,
     onRecheck: () -> Unit
 ) {
+    // Determine contextual title based on what actually failed
+    val hasVoiceIssue = !report.sttAvailable || !report.ttsOfflineVoiceAvailable
+    val hasConfigIssue = !report.vertexAiConfigured
+
+    val title = when {
+        hasVoiceIssue && hasConfigIssue -> "SETUP INCOMPLETE"
+        hasVoiceIssue -> "OFFLINE VOICE MODELS MISSING"
+        hasConfigIssue -> "VERTEX AI NOT CONFIGURED"
+        else -> "STARTUP CHECK FAILED"
+    }
+
+    val subtitle = when {
+        hasVoiceIssue && hasConfigIssue -> "Voice models and Vertex AI configuration need attention. See errors below."
+        hasVoiceIssue -> "Connect to terminal Wi-Fi to download the required Google/Samsung voice packs (~150MB)."
+        hasConfigIssue -> "Vertex AI service account is missing or misconfigured. See errors below."
+        else -> "One or more startup checks failed. See errors below."
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -161,7 +179,7 @@ fun ReadinessScreen(
             )
             Spacer(modifier = Modifier.height(24.dp))
             Text(
-                text = "OFFLINE VOICE MODELS MISSING",
+                text = title,
                 color = Color(0xFFFF5252),
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Black,
@@ -169,7 +187,7 @@ fun ReadinessScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Connect to terminal Wi-Fi to download the required Google/Samsung voice packs (~150MB).",
+                text = subtitle,
                 color = Color.White,
                 fontSize = 20.sp,
                 textAlign = TextAlign.Center
@@ -390,7 +408,7 @@ fun StateIndicator(state: AiState, currentTool: String) {
 }
 
 @Composable
-fun StatusBar(uiState: trucker.geminilive.controller.CopilotUiState) {
+fun StatusBar(uiState: trucker.geminiflash.controller.CopilotUiState) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

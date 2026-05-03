@@ -1,4 +1,4 @@
-package trucker.geminilive
+package trucker.geminiflash
 
 import org.junit.Test
 

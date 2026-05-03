@@ -1,4 +1,4 @@
-package trucker.geminilive.ui.theme
+package trucker.geminiflash.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
