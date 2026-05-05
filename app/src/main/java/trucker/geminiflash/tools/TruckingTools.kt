@@ -11,7 +11,15 @@ object TruckingTools {
     val declaration = listOf(
             FunctionDeclaration(
                 name = "getDriverDashboard",
-                description = "Returns comprehensive driver dashboard including profile info, HOS status, safety score, MPG/equipment performance metrics, and medical card renewal reminders.",
+                description = "Returns driver profile info, current location/corridor, safety score with recent events, MPG performance with peer comparison, and personal goals (home-time countdown, miles this month, referral bonus). Does NOT include HOS details or medical card status - use getComplianceStatus for those.",
+                parameters = Schema(
+                    type = "OBJECT",
+                    properties = emptyMap()
+                )
+            ),
+            FunctionDeclaration(
+                name = "getTruckInfo",
+                description = "Returns truck and trailer equipment details including tractor/trailer numbers, trailer type, ELD provider, and equipment health metrics (DEF level, fuel percentage, tire tread, active fault codes, service milestones).",
                 parameters = Schema(
                     type = "OBJECT",
                     properties = emptyMap()
@@ -19,7 +27,7 @@ object TruckingTools {
             ),
             FunctionDeclaration(
                 name = "getLoadInformation",
-                description = "Returns load details based on type. Use 'current' for active load with stops and ETAs, or 'next' for pre-dispatch information.",
+                description = "Returns load details based on type. Use 'current' for active load with stops, ETAs, and facility insights (parking/amenities), or 'next' for pre-dispatch information.",
                 parameters = Schema(
                     type = "OBJECT",
                     properties = mapOf(
@@ -41,7 +49,7 @@ object TruckingTools {
             ),
             FunctionDeclaration(
                 name = "getRouteConditions",
-                description = "Returns route planning information including traffic/weather conditions for the next hour and recommended fuel stops with amenities.",
+                description = "Returns real-time weather and traffic conditions for the immediate route (next 1 hour) and recommended fuel stops with amenities. For load-specific route risks tied to a specific delivery, use getLoadInformation.",
                 parameters = Schema(
                     type = "OBJECT",
                     properties = emptyMap()
@@ -61,7 +69,7 @@ object TruckingTools {
             ),
             FunctionDeclaration(
                 name = "getCompanyResources",
-                description = "Returns company information based on category. Use 'policies' for FAQs, 'mentor' for mentor program, 'ownerOperator' for lease program, or 'training' for modules.",
+                description = "Returns company information based on category. Use 'policies' for FAQs and terminal amenities/parking status, 'mentor' for mentor program, 'ownerOperator' for lease program, or 'training' for modules.",
                 parameters = Schema(
                     type = "OBJECT",
                     properties = mapOf(
@@ -72,7 +80,7 @@ object TruckingTools {
             ),
             FunctionDeclaration(
                 name = "getComplianceStatus",
-                description = "Returns compliance-focused information including HOS alerts, medical card status, DVIR requirements, and inspection scheduling.",
+                description = "Returns HOS status (drive/duty/cycle remaining, 7-day recap, break clocks, alerts), medical card status, DVIR submission status, and annual inspection scheduling. This is the authoritative source for all regulatory compliance data.",
                 parameters = Schema(
                     type = "OBJECT",
                     properties = emptyMap()
@@ -147,19 +155,12 @@ object TruckingTools {
                         put("nearest_city", "Flagstaff, AZ")
                         put("corridor", "I-40 EB")
                     })
-                    put("equipment", buildJsonObject {
-                        put("tractor", "684821")
-                        put("trailer", "903144")
-                        put("trailer_type", "53ft Dry Van")
-                        put("reefer_enabled", false)
-                        put("eld_provider", "Samsara")
-                    })
-                    put("hos_status", buildJsonObject {
-                        put("drive_hours_remaining", "5h 15m")
-                        put("duty_time_remaining", "8h 45m")
-                        put("cycle_hours_remaining", "18h 45m")
-                        put("next_break_due_in", "2h 30m")
-                        put("next_30m_break_due_by", "2026-05-15T17:05")
+                    put("personal_goals", buildJsonObject {
+                        put("next_scheduled_hometime", "2026-05-22")
+                        put("hometime_countdown_days", 7)
+                        put("miles_this_month", 9420)
+                        put("bonus_milestone_progress", "85%")
+                        put("referral_bonus_pending", "$500 (1 driver in orientation)")
                     })
                     put("safety_score", buildJsonObject {
                         put("current_score", 945)
@@ -188,19 +189,28 @@ object TruckingTools {
                             put("fuel_savings_vs_fleet", "$42.50 per week")
                         })
                     })
-                    put("medical_card_renewal", buildJsonObject {
-                        put("expires_on", "2026-12-14")
-                        put("days_until_expiry", 213)
-                        put("reminder_scheduled", true)
-                        put("next_reminder_date", "2026-09-15")
-                        put("renewal_window_opens", "2026-10-14")
-                        put("preferred_clinics", buildJsonArray {
-                            add("Concentra - Phoenix")
-                            add("Urgent Care Plus - Flagstaff")
-                            add("Swift Medical Partner - Tucson")
+                }
+            }
+            
+            "getTruckInfo" -> {
+                buildJsonObject {
+                    put("driver_id", DEMO_DRIVER_ID)
+                    put("equipment", buildJsonObject {
+                        put("tractor", "684821")
+                        put("trailer", "903144")
+                        put("trailer_type", "53ft Dry Van")
+                        put("reefer_enabled", false)
+                        put("eld_provider", "Samsara")
+                    })
+                    put("equipment_health", buildJsonObject {
+                        put("def_level_percentage", 82)
+                        put("fuel_level_percentage", 65)
+                        put("next_service_milestone", "Oil change due in 2,450 miles")
+                        put("tire_tread_status", "8/32 - Good")
+                        put("active_fault_codes", buildJsonArray {
+                            add("Sensor-ABS-Trailer (Non-critical)")
                         })
                     })
-                    put("dvir_status", "submitted_today")
                 }
             }
             
@@ -222,6 +232,13 @@ object TruckingTools {
                         put("origin", "Reno, NV")
                         put("destination", "Dallas, TX")
                         put("next_stop_eta", "2026-05-15T19:40")
+                        put("facility_insights", buildJsonObject {
+                            put("overnight_parking_allowed", true)
+                            put("bathroom_access", "Driver Lounge / 24-7")
+                            put("average_detention_time", "2.5 hours")
+                            put("entry_instructions", "Enter through North Gate on Miller Rd. Have CDL ready for security.")
+                            put("on_site_scale", true)
+                        })
                         put("stops", buildJsonArray {
                             add(buildJsonObject {
                                 put("stop_index", 1)
@@ -342,10 +359,10 @@ object TruckingTools {
                         })
                         put("quarterly_bonus_status", buildJsonObject {
                             put("eligible", true)
-                            put("current_score", 945)
                             put("required_score", 900)
                             put("projected_bonus", 450.00)
                             put("payment_date", "2026-07-15")
+                            put("note", "Check getDriverDashboard for current safety score")
                         })
                         put("total_projected_earnings", 600.00)
                     }
@@ -476,7 +493,19 @@ object TruckingTools {
                                 put("policy_summary", "Protocol for mechanical issues on the road.")
                             })
                         })
+                        put("terminal_info", buildJsonObject {
+                            put("current_terminal", "Phoenix Main")
+                            put("parking_capacity", "Limited (75% full)")
+                            put("amenities", buildJsonArray {
+                                add("Showers (6)")
+                                add("Laundry (Free)")
+                                add("Driver Lounge (WiFi/TV)")
+                                add("Cafeteria (0600-2200)")
+                            })
+                            put("shop_status", "Open 24/7")
+                        })
                     }
+
                     "mentor" -> buildJsonObject {
                         put("program_name", "Swift Driver Mentor Program")
                         put("overview", "Pass along your knowledge to the next generation of drivers while enhancing your own earning potential.")
@@ -536,6 +565,20 @@ object TruckingTools {
                         put("duty_time_remaining", "8h 45m")
                         put("cycle_hours_remaining", "18h 45m")
                         put("next_break_due_in", "2h 30m")
+                        put("next_30m_break_due_by", "2026-05-15T17:05")
+                        put("hos_recap", buildJsonObject {
+                            put("hours_returning_at_midnight", "8.5")
+                            put("eight_day_total", "61.5")
+                            put("next_7_day_projection", buildJsonArray {
+                                add(buildJsonObject { put("date", "2026-05-16"); put("hours_back", "8.5") })
+                                add(buildJsonObject { put("date", "2026-05-17"); put("hours_back", "11.0") })
+                                add(buildJsonObject { put("date", "2026-05-18"); put("hours_back", "0.0") })
+                                add(buildJsonObject { put("date", "2026-05-19"); put("hours_back", "9.5") })
+                                add(buildJsonObject { put("date", "2026-05-20"); put("hours_back", "10.0") })
+                                add(buildJsonObject { put("date", "2026-05-21"); put("hours_back", "8.0") })
+                                add(buildJsonObject { put("date", "2026-05-22"); put("hours_back", "7.5") })
+                            })
+                        })
                         put("alerts", buildJsonArray {
                             add(buildJsonObject {
                                 put("category", "HOS")
@@ -552,6 +595,11 @@ object TruckingTools {
                         put("next_reminder_date", "2026-09-15")
                         put("renewal_window_opens", "2026-10-14")
                         put("dot_physical_required", true)
+                        put("preferred_clinics", buildJsonArray {
+                            add("Concentra - Phoenix")
+                            add("Urgent Care Plus - Flagstaff")
+                            add("Swift Medical Partner - Tucson")
+                        })
                     })
                     put("dvir_status", "submitted_today")
                     put("annual_inspection", buildJsonObject {
