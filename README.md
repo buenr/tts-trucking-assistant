@@ -83,5 +83,13 @@ For this architecture to succeed without relying on the network, the tablets **m
 *   **Hands-Free / Eyes-Free:** The app relies entirely on auditory feedback. The UI displays high-contrast, large, color-coded states (Listening [Green], Thinking [Yellow], Speaking [Blue], Offline [Red]) visible from a peripheral glance. 
 *   **Audio Ducking:** The application uses Android's `AudioManager` to request `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`. This automatically lowers the volume of any music, radio, or GPS navigation playing on the tablet while the Co-Pilot is speaking or listening. 
  
-## 8. Summary of Benefits 
+## 8. Answer Mode Feature
+The application includes a user-configurable **Answer Mode** that allows drivers to choose between two response styles:
+
+*   **SHORT Mode (Default):** Enforces 1-2 sentence maximum responses, optimized for hands-free, eyes-free driving scenarios. Answers only the specific question asked without extra context.
+*   **LONG Mode:** Provides detailed, comprehensive responses with relevant context and additional helpful information, allowing 3-5 sentences when appropriate.
+
+The mode is selectable via a settings button in the UI and dynamically adjusts the system prompt sent to the LLM, ensuring responses match the driver's preference without requiring separate model deployments.
+
+## 9. Summary of Benefits 
 By isolating the Heavy Compute (Audio/Voice processing) to the Galaxy Tab Active 5's native offline stack and isolating the Cognitive Compute (Intelligence) to the remote LLM, this architecture guarantees extreme bandwidth efficiency. A driver in a remote area with only 1 bar of LTE will still experience a highly responsive AI co-pilot, indistinguishable from a broadband connection. 
