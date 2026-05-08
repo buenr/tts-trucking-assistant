@@ -79,6 +79,10 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
         closeAppCallback = callback
     }
 
+    fun setAnswerMode(mode: trucker.geminiflash.controller.AnswerMode) {
+        controller.setAnswerMode(mode)
+    }
+
     
     fun addLog(message: String) {
         // Controller owns the logs; this is a convenience bridge for external log injection

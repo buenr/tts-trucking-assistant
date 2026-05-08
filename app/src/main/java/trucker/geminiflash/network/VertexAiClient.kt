@@ -70,6 +70,7 @@ class VertexAiClient(private val context: Context) {
     suspend fun sendMessageStream(
         textInput: String,
         history: List<Content> = emptyList(),
+        answerMode: trucker.geminiflash.controller.AnswerMode = trucker.geminiflash.controller.AnswerMode.LONG,
         onDelta: (String) -> Unit
     ): GeminiResponse = withContext(Dispatchers.IO) {
         try {
@@ -79,7 +80,7 @@ class VertexAiClient(private val context: Context) {
             val accumulatedText = StringBuilder()
             val functionCalls = mutableListOf<FunctionCallData>()
 
-            val responseStream = client.models.generateContentStream(BuildConfig.VERTEX_AI_MODEL, contents, buildConfig())
+            val responseStream = client.models.generateContentStream(BuildConfig.VERTEX_AI_MODEL, contents, buildConfig(answerMode))
             for (chunk in responseStream) {
                 val text = chunk.text()
                 if (!text.isNullOrBlank()) {
@@ -126,7 +127,8 @@ class VertexAiClient(private val context: Context) {
      */
     suspend fun sendFunctionResults(
         functionResults: List<FunctionResult>,
-        history: List<Content> = emptyList()
+        history: List<Content> = emptyList(),
+        answerMode: trucker.geminiflash.controller.AnswerMode = trucker.geminiflash.controller.AnswerMode.LONG
     ): GeminiResponse = withContext(Dispatchers.IO) {
         try {
             val client = getClient()
@@ -149,7 +151,7 @@ class VertexAiClient(private val context: Context) {
             val response = client.models.generateContent(
                 VertexAuth.MODEL,
                 contents,
-                buildConfig()
+                buildConfig(answerMode)
             )
 
             parseResponse(response)
@@ -169,53 +171,21 @@ class VertexAiClient(private val context: Context) {
         }
     }
 
-    private fun buildConfig(): GenerateContentConfig {
+    private fun buildConfig(answerMode: trucker.geminiflash.controller.AnswerMode = trucker.geminiflash.controller.AnswerMode.LONG): GenerateContentConfig {
         val tools = TruckingTools.getVertexTools()
+        val systemInstruction = buildSystemInstruction(answerMode)
 
         return GenerateContentConfig.builder()
-            .systemInstruction(Content.fromParts(Part.fromText(SYSTEM_INSTRUCTION)))
+            .systemInstruction(Content.fromParts(Part.fromText(systemInstruction)))
             .temperature(0.2f)
             .maxOutputTokens(512)
             .tools(tools)
             .build()
     }
 
-    private fun parseResponse(response: GenerateContentResponse): GeminiResponse {
-        val text = response.text()
-        val functionCalls = response.functionCalls()
-
-        return if (!functionCalls.isNullOrEmpty()) {
-            val calls = functionCalls.map { funcCall ->
-                FunctionCallData(
-                    id = funcCall.id().orElse(UUID.randomUUID().toString()),
-                    name = funcCall.name().orElse(""),
-                    args = funcCall.args().orElse(null)?.let { argsMap ->
-                        val jsonObject = buildJsonObject {
-                            argsMap.forEach { (key, value) ->
-                                when (value) {
-                                    is String -> put(key, value)
-                                    is Number -> put(key, value)
-                                    is Boolean -> put(key, value)
-                                    else -> put(key, value.toString())
-                                }
-                            }
-                        }
-                        Json.encodeToJsonElement(jsonObject)
-                    }
-                )
-            }
-            GeminiResponse.NeedsFunctionCall(calls, "")
-        } else {
-            GeminiResponse.Text(GeminiResponse.sanitizeTextForTts(text ?: ""), "")
-        }
-    }
-
-    companion object {
-        private const val TAG = "VertexAiClient"
-        private val SYSTEM_INSTRUCTION = """
-            # PERSONA
-            You are a Knight-Swift Transportation trucking in-cab copilot (AI Assistant) on their tablet. Your responses will be spoken aloud via text-to-speech (TTS) to the driver. Directly address the driver's question, don't add irrelevant information from the tool call result. Use concise, operational language familiar to truck drivers.
-
+    private fun buildSystemInstruction(answerMode: trucker.geminiflash.controller.AnswerMode): String {
+        val brevitySection = if (answerMode == trucker.geminiflash.controller.AnswerMode.SHORT) {
+            """
             # RESPONSE BREVITY - FOLLOW STRICTLY
             - Keep ALL responses to 1-2 short sentences MAXIMUM. Never more than two sentences.
             - Answer ONLY the specific question asked. Do not add extra context, explanations, pleasantries, or additional facts from the tool result.
@@ -225,6 +195,23 @@ class VertexAiClient(private val context: Context) {
             - Example GOOD: "You are heading to your fuel stop in Flagstaff. Your delivery appointment is at one PM."
             - Example BAD: "You have five hours and fifteen minutes of drive time remaining, eight hours and forty-five minutes of duty time remaining, and eighteen hours and forty-five minutes on your cycle. Your next break is due in two hours and thirty minutes."
             - Example GOOD: "You have five hours and fifteen minutes of drive time left."
+            """
+        } else {
+            """
+            # RESPONSE STYLE - LONG MODE
+            - Provide detailed, comprehensive responses when the driver's question warrants elaboration.
+            - Include relevant context and additional helpful information from tool results.
+            - Still be concise where appropriate - don't pad responses unnecessarily.
+            - You may use 3-5 sentences when the situation calls for more detail.
+            - When presenting multiple pieces of information, organize them clearly.
+            """
+        }
+
+        return """
+            # PERSONA
+            You are a Knight-Swift Transportation trucking in-cab copilot (AI Assistant) on their tablet. Your responses will be spoken aloud via text-to-speech (TTS) to the driver. Directly address the driver's question, don't add irrelevant information from the tool call result. Use concise, operational language familiar to truck drivers.
+
+            $brevitySection
 
             # TTS OPTIMIZATION RULES - FOLLOW STRICTLY
             - ALWAYS use full state names (e.g., "Arizona" not "AZ", "California" not "CA", "Texas" not "TX").
@@ -318,6 +305,40 @@ class VertexAiClient(private val context: Context) {
             - If NO tool can answer: State "That's outside what I can check for you. Contact your Driver Leader for help." Do not fabricate details.
             - If unsure which tool: Choose the closest match and evaluate if the tool can answer the question, or ask a clarifying question.
         """.trimIndent()
+    }
+
+    private fun parseResponse(response: GenerateContentResponse): GeminiResponse {
+        val text = response.text()
+        val functionCalls = response.functionCalls()
+
+        return if (!functionCalls.isNullOrEmpty()) {
+            val calls = functionCalls.map { funcCall ->
+                FunctionCallData(
+                    id = funcCall.id().orElse(UUID.randomUUID().toString()),
+                    name = funcCall.name().orElse(""),
+                    args = funcCall.args().orElse(null)?.let { argsMap ->
+                        val jsonObject = buildJsonObject {
+                            argsMap.forEach { (key, value) ->
+                                when (value) {
+                                    is String -> put(key, value)
+                                    is Number -> put(key, value)
+                                    is Boolean -> put(key, value)
+                                    else -> put(key, value.toString())
+                                }
+                            }
+                        }
+                        Json.encodeToJsonElement(jsonObject)
+                    }
+                )
+            }
+            GeminiResponse.NeedsFunctionCall(calls, "")
+        } else {
+            GeminiResponse.Text(GeminiResponse.sanitizeTextForTts(text ?: ""), "")
+        }
+    }
+
+    companion object {
+        private const val TAG = "VertexAiClient"
     }
 }
 

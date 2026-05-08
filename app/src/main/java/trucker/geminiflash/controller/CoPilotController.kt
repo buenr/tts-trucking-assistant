@@ -29,8 +29,20 @@ class CoPilotController(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private val vertexAiClient = VertexAiClient(appContext)
+    private val settingsManager = SettingsManager(appContext)
 
-    private val _uiState = MutableStateFlow(CopilotUiState())
+    // Answer mode state
+    private var _answerMode = MutableStateFlow(settingsManager.getAnswerMode())
+    val answerMode: StateFlow<AnswerMode> = _answerMode
+
+    fun setAnswerMode(mode: AnswerMode) {
+        _answerMode.value = mode
+        settingsManager.setAnswerMode(mode)
+        updateUi { it.copy(answerMode = mode) }
+        addLog("Answer mode: ${mode.label}")
+    }
+
+    private val _uiState = MutableStateFlow(CopilotUiState(answerMode = settingsManager.getAnswerMode()))
     val uiState: StateFlow<CopilotUiState> = _uiState
 
     private val _logs = MutableStateFlow<List<String>>(emptyList())
@@ -195,7 +207,8 @@ class CoPilotController(
 
                 val response = vertexAiClient.sendMessageStream(
                     textInput = text,
-                    history = currentHistory
+                    history = currentHistory,
+                    answerMode = _answerMode.value
                 ) { deltaText ->
                     synchronized(partialTextBuffer) {
                         partialTextBuffer.append(deltaText)
@@ -355,7 +368,8 @@ class CoPilotController(
             val currentHistory = conversationHistory.toList()
             val finalResponse = vertexAiClient.sendFunctionResults(
                 functionResults = functionResults,
-                history = currentHistory
+                history = currentHistory,
+                answerMode = _answerMode.value
             )
 
             cancelQueryingCueLoop()
@@ -461,8 +475,14 @@ data class CopilotUiState(
     val userText: String = "",
     val geminiText: String = "",
     val currentTool: String = "",
-    val lastError: String = ""
+    val lastError: String = "",
+    val answerMode: AnswerMode = AnswerMode.LONG
 )
+
+enum class AnswerMode(val label: String) {
+    SHORT("Short"),
+    LONG("Long")
+}
 
 enum class AiState(val label: String) {
     LISTENING("Listening..."),

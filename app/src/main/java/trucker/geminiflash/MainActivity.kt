@@ -238,11 +238,26 @@ fun CopilotApp(viewModel: GeminiViewModel) {
         }
     }
 
+    // Answer mode toggle
+    var showAnswerModeDialog by remember { mutableStateOf(false) }
+
     // Background color subtly shifts with state for peripheral visibility
     val bgColor = when (uiState.aiState) {
         AiState.LISTENING -> Color(0xFF0A1F0A) // very dark green tint
         AiState.CHECKING_DATA -> Color(0xFF1F1F0A) // very dark yellow tint
         AiState.SPEAKING -> Color(0xFF0A0A1F) // very dark blue tint
+    }
+
+    // Answer mode dialog
+    if (showAnswerModeDialog) {
+        AnswerModeDialog(
+            currentMode = uiState.answerMode,
+            onDismiss = { showAnswerModeDialog = false },
+            onModeSelected = { mode ->
+                viewModel.setAnswerMode(mode)
+                showAnswerModeDialog = false
+            }
+        )
     }
 
     Box(
@@ -256,13 +271,50 @@ fun CopilotApp(viewModel: GeminiViewModel) {
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Hidden tap area for developer logs
-            Box(
+            // Top bar with hidden tap area and answer mode button
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp)
-                    .clickable { tapCount++ }
-            )
+                    .height(48.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Hidden tap area for developer logs
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clickable { tapCount++ }
+                )
+                
+                // Answer mode toggle button
+                Surface(
+                    modifier = Modifier
+                        .clickable { showAnswerModeDialog = true }
+                        .padding(8.dp),
+                    shape = MaterialTheme.shapes.small,
+                    color = Color(0xFF2D2D2D)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Answer Mode",
+                            tint = Color(0xFF00E676),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = uiState.answerMode.label,
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -463,6 +515,116 @@ fun LogConsole(logs: List<String>) {
                     )
                 }
             )
+        }
+    }
+}
+
+@Composable
+fun AnswerModeDialog(
+    currentMode: trucker.geminiflash.controller.AnswerMode,
+    onDismiss: () -> Unit,
+    onModeSelected: (trucker.geminiflash.controller.AnswerMode) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Answer Mode",
+                fontWeight = FontWeight.Bold,
+                fontSize = 24.sp
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Choose how detailed the copilot's responses should be:",
+                    fontSize = 16.sp,
+                    color = Color.Gray
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Short mode option
+                AnswerModeOption(
+                    mode = trucker.geminiflash.controller.AnswerMode.SHORT,
+                    isSelected = currentMode == trucker.geminiflash.controller.AnswerMode.SHORT,
+                    title = "Short Answers",
+                    description = "Brief, 1-2 sentence responses. Best for quick questions while driving.",
+                    onClick = { onModeSelected(trucker.geminiflash.controller.AnswerMode.SHORT) }
+                )
+                
+                // Long mode option
+                AnswerModeOption(
+                    mode = trucker.geminiflash.controller.AnswerMode.LONG,
+                    isSelected = currentMode == trucker.geminiflash.controller.AnswerMode.LONG,
+                    title = "Detailed Answers",
+                    description = "Comprehensive responses with additional context and information.",
+                    onClick = { onModeSelected(trucker.geminiflash.controller.AnswerMode.LONG) }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close", fontSize = 16.sp)
+            }
+        },
+        containerColor = Color(0xFF1A1A1A),
+        titleContentColor = Color.White,
+        textContentColor = Color.White
+    )
+}
+
+@Composable
+fun AnswerModeOption(
+    mode: trucker.geminiflash.controller.AnswerMode,
+    isSelected: Boolean,
+    title: String,
+    description: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.medium,
+        color = if (isSelected) Color(0xFF00E676).copy(alpha = 0.2f) else Color(0xFF2D2D2D),
+        border = androidx.compose.foundation.BorderStroke(
+            width = 2.dp,
+            color = if (isSelected) Color(0xFF00E676) else Color.Transparent
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected) Color(0xFF00E676) else Color.White
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = description,
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+            }
+            
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "Selected",
+                    tint = Color(0xFF00E676),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
     }
 }
