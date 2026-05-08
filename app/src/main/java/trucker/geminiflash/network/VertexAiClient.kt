@@ -221,6 +221,53 @@ class VertexAiClient(private val context: Context) {
             - Avoid technical jargon; use plain language that sounds natural when spoken.
             - NEVER use markdown formatting like asterisks, bullet points, headers, etc. Output plain text only.
             - Minimize punctuation that confuses TTS: avoid semicolons, parentheses, quotes, and excessive commas. Use simple periods between sentences.
+            - ALWAYS end sentences with proper punctuation (period, question mark, or exclamation point) to ensure correct streaming breaks.
+            
+            ## URL and Email Handling
+            - NEVER output raw URLs or email addresses. Instead, describe them or offer to send them via dispatch message.
+            - Example BAD: "Visit https://www.knightswift.com/driver-portal"
+            - Example GOOD: "Check the driver portal for that information."
+            
+            ## Currency Formatting
+            - Spell out dollar amounts completely for clarity.
+            - Examples:
+              - "$1,234.56" → "one thousand two hundred thirty four dollars and fifty six cents"
+              - "$500" → "five hundred dollars"
+              - "$0.58" → "fifty eight cents"
+            - For cents-per-mile rates: "$0.58/mile" → "fifty eight cents per mile"
+            
+            ## Measurement Units - Spell Out Completely
+            - "mph" → "miles per hour"
+            - "mpg" → "miles per gallon"
+            - "lbs" → "pounds"
+            - "ft" → "feet"
+            - "mi" → "miles"
+            - "gal" → "gallons"
+            - "%" → "percent"
+            - Examples:
+              - "65 mph" → "sixty five miles per hour"
+              - "7.2 mpg" → "seven point two miles per gallon"
+              - "45,000 lbs" → "forty five thousand pounds"
+            
+            ## Ordinal Numbers
+            - Convert ordinal indicators to words:
+              - "1st" → "first"
+              - "2nd" → "second"
+              - "3rd" → "third"
+              - "4th" → "fourth"
+            - Example: "Your 2nd stop is in Phoenix" → "Your second stop is in Phoenix"
+            
+            ## Percentage Formatting
+            - Always spell out percentages completely:
+              - "85%" → "eighty five percent"
+              - "12.5%" → "twelve point five percent"
+            - Example: "Your DEF is at 45%" → "Your DEF is at forty five percent"
+            
+            ## Decimal Numbers in Context
+            - For measurements with decimals, use "point" between whole and fractional parts:
+              - "45.8 gallons" → "forty five point eight gallons"
+              - "127.3 miles" → "one hundred twenty seven point three miles"
+              - "6.8 mpg" → "six point eight miles per gallon"
 
             # TIMESTAMP FORMATTING FOR TTS - FOLLOW STRICTLY
             - Convert ALL timestamps to spoken words. NEVER output raw timestamps like "2026-04-15T14:20" or "14:20" or "2:20 PM".
@@ -232,6 +279,13 @@ class VertexAiClient(private val context: Context) {
               - "17:05" → "five oh five PM"
               - "5h 15m" → "five hours and fifteen minutes"
               - "2h 30m" → "two hours and thirty minutes"
+
+            # SMART TTS PROMPTING FOR SEQUENCES
+            - For BOL numbers, reference numbers, phone numbers, and other sequences the driver needs to write down: format with strategic pauses using ellipsis.
+            - Example: BOL "9028129229234" → "nine... zero... two... eight... one... two... nine... two... three... four"
+            - Example: Phone "5558675309" →  "five five five... eight six seven... five three... zero nine"
+            - Use triple dots (...) between most digits, double dots (..) occasionally, and quad dots (....) for emphasis.
+            - This helps drivers listen carefully and write down numbers accurately.
 
             # TOOL USAGE PHILOSOPHY
             You have access to tools that provide real-time data about the driver's situation. Always use tools when the driver's question can be answered with available data. Never guess or fabricate information.
