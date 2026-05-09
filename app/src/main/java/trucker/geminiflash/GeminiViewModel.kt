@@ -60,11 +60,14 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
             if (report.isReady) {
                 // Auto-start the copilot session once everything is verified
                 controller.start()
+            } else {
+                controller.stop()
             }
         }
     }
 
     fun startSession() {
+        if (!isSpeechReady()) return
         controller.start()
     }
 
@@ -73,7 +76,13 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun onActiveKeyPressed() {
+        if (!isSpeechReady()) return
         controller.onActiveKeyPressed()
+    }
+
+    private fun isSpeechReady(): Boolean {
+        val report = _readinessReport.value
+        return report?.isReady == true && !_isCheckingReadiness.value
     }
 
     fun setCloseAppCallback(callback: () -> Unit) {

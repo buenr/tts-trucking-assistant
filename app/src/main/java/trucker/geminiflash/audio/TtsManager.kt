@@ -60,7 +60,9 @@ class TtsManager(context: Context) {
                     tts?.voice = currentVoice
                     Log.d("TtsManager", "Using offline voice: ${currentVoice.name}")
                 } else {
-                    Log.w("TtsManager", "No offline US English voice found; falling back to default")
+                    Log.e("TtsManager", "Offline-only policy blocked TTS: no offline English voice found")
+                    isInitialized = false
+                    return@TextToSpeech
                 }
 
                 tts?.language = Locale.US
@@ -191,6 +193,12 @@ class TtsManager(context: Context) {
     private fun processNextSentence() {
         if (!isInitialized) {
             Log.w("TtsManager", "TTS not initialized yet")
+            return
+        }
+        if (!hasOfflineVoice) {
+            Log.e("TtsManager", "Offline-only policy blocked queued speech: no offline voice")
+            pendingSentences.clear()
+            isSpeaking = false
             return
         }
 

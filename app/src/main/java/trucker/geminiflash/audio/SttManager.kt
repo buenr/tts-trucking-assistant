@@ -95,7 +95,17 @@ class SttManager(context: Context) {
         if (speechRecognizer != null) {
             speechRecognizer?.destroy()
         }
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext).apply {
+        if (!isOfflineAvailable) {
+            speechRecognizer = null
+            return
+        }
+        speechRecognizer = try {
+            SpeechRecognizer.createOnDeviceSpeechRecognizer(appContext)
+        } catch (e: Exception) {
+            Log.e("SttManager", "Failed to create on-device recognizer", e)
+            null
+        }
+        speechRecognizer?.apply {
             setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {
                     Log.d("SttManager", "Ready for speech")
@@ -170,9 +180,19 @@ class SttManager(context: Context) {
             Log.w("SttManager", "Already listening, skipping start")
             return
         }
+        if (!isOfflineAvailable) {
+            Log.e("SttManager", "Offline-only policy blocked STT start: on-device recognition unavailable")
+            onError?.invoke(SpeechRecognizer.ERROR_CANNOT_CHECK_SUPPORT)
+            return
+        }
 
         if (speechRecognizer == null) {
             initializeRecognizer()
+        }
+        if (speechRecognizer == null) {
+            Log.e("SttManager", "Offline-only policy blocked STT start: no on-device recognizer instance")
+            onError?.invoke(SpeechRecognizer.ERROR_CLIENT)
+            return
         }
 
         _currentNoiseProfile.value = profile

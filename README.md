@@ -40,8 +40,10 @@ The system follows a reactive **Clean Architecture (MVVM)**, utilizing Kotlin Co
 *   **Native Stack Implementation:** `android.speech.SpeechRecognizer`. 
 *   **Offline Enforcement:**  
    *   Prior to initialization, the app calls `SpeechRecognizer.isOnDeviceRecognitionAvailable(context)`. 
+   *   STT uses `SpeechRecognizer.createOnDeviceSpeechRecognizer(...)` and fails closed when on-device recognition is unavailable.
    *   The intent `RecognizerIntent.ACTION_RECOGNIZE_SPEECH` is fired with `RecognizerIntent.EXTRA_PREFER_OFFLINE` set to `true`. 
-   *   This guarantees that STT processing occurs entirely on the Exynos NPU. No audio data ever touches the LTE network. 
+   *   Network-related recognizer errors are treated as policy violations and are not auto-retried into possible cloud fallback paths.
+   *   Result: no STT session starts unless on-device recognition is available. 
 *   **Partial Results:** For testing, utilize `onPartialResults()` to display real-time text on the tablet screen, letting the tester know the system is hearing them correctly before the final payload is sent to the LLM. 
  
 ### 4.3. LLM Network Gateway (The "Middle") 
@@ -56,9 +58,9 @@ The system follows a reactive **Clean Architecture (MVVM)**, utilizing Kotlin Co
 ### 4.4. Text-to-Speech (TTS) - Offline Mode 
 *   **Native Stack Implementation:** `android.speech.tts.TextToSpeech`. 
 *   **Offline Enforcement:**  
-   *   Engine forced to use the pre-installed Google TTS (English) 
+   *   Engine is validated against offline English voices during initialization.
    *   Required voice packs (e.g., en-US high-quality) are verified upon app startup.  
-   *   Network synthesis is explicitly disabled via `tts.setSpeechRate()` and configuration parameters to ensure zero network calls are made. 
+   *   TTS fails closed when no offline voice is available (no fallback to default or network-required voices).
 *   **Streaming TTS:** As the LLM streams tokens (words) back via SSE/WebSocket, the Co-Pilot Logic Controller chunks the text at sentence boundaries (using punctuation like `.`, `?`, `!`). These chunks are fed into the TTS queue sequentially. This means the tablet begins speaking the response *before* the LLM has finished generating the entire paragraph. 
  
 ## 5. Handling the Low 4G LTE Environment 
@@ -93,3 +95,8 @@ The mode is selectable via a settings button in the UI and dynamically adjusts t
 
 ## 9. Summary of Benefits 
 By isolating the Heavy Compute (Audio/Voice processing) to the Galaxy Tab Active 5's native offline stack and isolating the Cognitive Compute (Intelligence) to the remote LLM, this architecture guarantees extreme bandwidth efficiency. A driver in a remote area with only 1 bar of LTE will still experience a highly responsive AI co-pilot, indistinguishable from a broadband connection. 
+
+## 10. Network Policy Boundary
+- STT and TTS run in offline-only mode and fail closed when offline prerequisites are missing.
+- Startup readiness gating prevents entering driving mode unless offline STT and offline TTS are available.
+- The only network-enabled function is Vertex AI LLM text exchange via `VertexAiClient`.

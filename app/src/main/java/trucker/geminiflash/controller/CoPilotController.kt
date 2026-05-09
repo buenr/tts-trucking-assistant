@@ -80,6 +80,15 @@ class CoPilotController(
             onError = { errorCode ->
                 addLog("STT Error: $errorCode")
                 _partialText.value = ""
+                if (errorCode == android.speech.SpeechRecognizer.ERROR_NETWORK ||
+                    errorCode == android.speech.SpeechRecognizer.ERROR_NETWORK_TIMEOUT
+                ) {
+                    addLog("Offline-only STT policy: network recognizer path blocked")
+                    updateUi {
+                        it.copy(lastError = "Offline STT required. Install on-device speech pack.")
+                    }
+                    return@setCallbacks
+                }
                 // Only retry if we're still supposed to be listening (not processing)
                 if (isActive && _uiState.value.aiState == AiState.LISTENING) {
                     // Small error recovery delay, then resume listening

@@ -27,6 +27,7 @@ class VertexAiClient(private val context: Context) {
             // Load credentials and project ID from VertexCredentialsManager
             val projectId = VertexCredentialsManager.getProjectId(context)
             val credentials = VertexCredentialsManager.getCredentials(context)
+            validateVertexOnlyNetworkPolicy(projectId, BuildConfig.VERTEX_AI_LOCATION, BuildConfig.VERTEX_AI_MODEL)
 
             client = Client.builder()
                 .vertexAI(true)
@@ -149,7 +150,7 @@ class VertexAiClient(private val context: Context) {
             }
 
             val response = client.models.generateContent(
-                VertexAuth.MODEL,
+                BuildConfig.VERTEX_AI_MODEL,
                 contents,
                 buildConfig(answerMode)
             )
@@ -393,6 +394,21 @@ class VertexAiClient(private val context: Context) {
 
     companion object {
         private const val TAG = "VertexAiClient"
+        private val allowedLocations = setOf("global", "us-central1", "us-east1", "us-west1", "europe-west4", "asia-southeast1")
+
+        /**
+         * Network policy guardrail: app network access is reserved for Vertex LLM calls only.
+         */
+        fun validateVertexOnlyNetworkPolicy(projectId: String, location: String, model: String) {
+            require(projectId.isNotBlank()) { "Vertex project ID is required for LLM network access" }
+            require(location in allowedLocations) { "Unsupported Vertex location: $location" }
+            require(isAllowedVertexModel(model)) { "Unsupported non-Vertex model: $model" }
+        }
+
+        fun isAllowedVertexModel(model: String): Boolean {
+            val normalized = model.trim().lowercase()
+            return normalized.startsWith("gemini-")
+        }
     }
 }
 
