@@ -39,6 +39,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import trucker.geminiflash.controller.AiState
 import trucker.geminiflash.startup.StartupReadinessManager
 import trucker.geminiflash.ui.theme.MyApplicationTheme
+import trucker.geminiflash.audio.NoiseProfile
 
 class MainActivity : ComponentActivity() {
 
@@ -240,6 +241,9 @@ fun CopilotApp(viewModel: GeminiViewModel) {
 
     // Answer mode toggle
     var showAnswerModeDialog by remember { mutableStateOf(false) }
+    
+    // Noise profile toggle
+    var showNoiseProfileDialog by remember { mutableStateOf(false) }
 
     // Background color subtly shifts with state for peripheral visibility
     val bgColor = when (uiState.aiState) {
@@ -260,6 +264,18 @@ fun CopilotApp(viewModel: GeminiViewModel) {
         )
     }
 
+    // Noise profile dialog
+    if (showNoiseProfileDialog) {
+        NoiseProfileDialog(
+            currentProfile = viewModel.getNoiseProfile(),
+            onDismiss = { showNoiseProfileDialog = false },
+            onProfileSelected = { profile ->
+                viewModel.setNoiseProfile(profile)
+                showNoiseProfileDialog = false
+            }
+        )
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -271,7 +287,7 @@ fun CopilotApp(viewModel: GeminiViewModel) {
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top bar with hidden tap area and answer mode button
+            // Top bar with hidden tap area and settings buttons
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -287,29 +303,57 @@ fun CopilotApp(viewModel: GeminiViewModel) {
                         .clickable { tapCount++ }
                 )
                 
-                // Answer mode toggle button
+                // Noise profile button
                 Surface(
                     modifier = Modifier
-                        .clickable { showAnswerModeDialog = true }
-                        .padding(8.dp),
+                        .clickable { showNoiseProfileDialog = true }
+                        .padding(4.dp),
                     shape = MaterialTheme.shapes.small,
                     color = Color(0xFF2D2D2D)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = "Noise Profile",
+                            tint = Color(0xFFFFC107),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = viewModel.getNoiseProfile().label,
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+                
+                // Answer mode button
+                Surface(
+                    modifier = Modifier
+                        .clickable { showAnswerModeDialog = true }
+                        .padding(4.dp),
+                    shape = MaterialTheme.shapes.small,
+                    color = Color(0xFF2D2D2D)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = "Answer Mode",
                             tint = Color(0xFF00E676),
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = uiState.answerMode.label,
                             color = Color.White,
-                            fontSize = 14.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -622,6 +666,126 @@ fun AnswerModeOption(
                     imageVector = Icons.Default.Settings,
                     contentDescription = "Selected",
                     tint = Color(0xFF00E676),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+    }
+}
+
+
+@Composable
+fun NoiseProfileDialog(
+    currentProfile: NoiseProfile,
+    onDismiss: () -> Unit,
+    onProfileSelected: (NoiseProfile) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Noise Profile",
+                fontWeight = FontWeight.Bold,
+                fontSize = 24.sp
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Select the noise level for your current driving environment:",
+                    fontSize = 16.sp,
+                    color = Color.Gray
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Quiet mode option
+                NoiseProfileOption(
+                    profile = NoiseProfile.QUIET,
+                    isSelected = currentProfile == NoiseProfile.QUIET,
+                    title = "Quiet",
+                    description = "Office/home environment. Shorter silence timeout (800ms).",
+                    onClick = { onProfileSelected(NoiseProfile.QUIET) }
+                )
+                
+                // Normal mode option
+                NoiseProfileOption(
+                    profile = NoiseProfile.NORMAL,
+                    isSelected = currentProfile == NoiseProfile.NORMAL,
+                    title = "Normal",
+                    description = "Regular city/suburban driving. Standard timeout (1000ms).",
+                    onClick = { onProfileSelected(NoiseProfile.NORMAL) }
+                )
+                
+                // Loud truck mode option
+                NoiseProfileOption(
+                    profile = NoiseProfile.LOUD_TRUCK,
+                    isSelected = currentProfile == NoiseProfile.LOUD_TRUCK,
+                    title = "Loud Truck",
+                    description = "Highway/high noise. Longer timeout (1500ms) to capture full speech.",
+                    onClick = { onProfileSelected(NoiseProfile.LOUD_TRUCK) }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close", fontSize = 16.sp)
+            }
+        },
+        containerColor = Color(0xFF1A1A1A),
+        titleContentColor = Color.White,
+        textContentColor = Color.White
+    )
+}
+
+@Composable
+fun NoiseProfileOption(
+    profile: NoiseProfile,
+    isSelected: Boolean,
+    title: String,
+    description: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.medium,
+        color = if (isSelected) Color(0xFFFFC107).copy(alpha = 0.2f) else Color(0xFF2D2D2D),
+        border = androidx.compose.foundation.BorderStroke(
+            width = 2.dp,
+            color = if (isSelected) Color(0xFFFFC107) else Color.Transparent
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected) Color(0xFFFFC107) else Color.White
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = description,
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+            }
+            
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = "Selected",
+                    tint = Color(0xFFFFC107),
                     modifier = Modifier.size(24.dp)
                 )
             }

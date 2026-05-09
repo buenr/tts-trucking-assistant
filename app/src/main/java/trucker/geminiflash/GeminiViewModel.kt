@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import trucker.geminiflash.audio.SttManager
 import trucker.geminiflash.audio.TtsManager
+import trucker.geminiflash.audio.NoiseProfile
 import trucker.geminiflash.controller.AiState
 import trucker.geminiflash.controller.CoPilotController
 import trucker.geminiflash.controller.CopilotUiState
@@ -81,6 +82,14 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setAnswerMode(mode: trucker.geminiflash.controller.AnswerMode) {
         controller.setAnswerMode(mode)
+    }
+
+    fun setNoiseProfile(profile: trucker.geminiflash.audio.NoiseProfile) {
+        controller.setNoiseProfile(profile)
+    }
+
+    fun getNoiseProfile(): trucker.geminiflash.audio.NoiseProfile {
+        return controller.getNoiseProfile()
     }
 
     
