@@ -2,7 +2,10 @@
 
 This document outlines the steps to move from a bundled Service Account key to a secure, MDM-managed configuration for production rollout.
 
-## Why this is necessary
+## Current State (Development)
+The app currently uses **direct loading** of credentials from `app/src/main/assets/vertex-ai-testing1.json`. This is managed by `VertexCredentialsManager.kt` and is suitable for development but **NOT for production**.
+
+## Why Migration is Necessary
 Bundling a Service Account JSON file in the APK assets is a security risk. If the APK is extracted, the key is exposed. Using **Managed Configurations** allows the key to be delivered securely to the device at runtime by your MDM (Mobile Device Management) provider.
 
 ---
