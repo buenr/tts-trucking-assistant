@@ -23,6 +23,7 @@ class StartupReadinessManager(private val context: Context) {
         val isReady: Boolean,
         val sttAvailable: Boolean,
         val ttsOfflineVoiceAvailable: Boolean,
+        val googleTtsInstalled: Boolean,
         val vertexAiConfigured: Boolean,
         val errors: List<String>
     )
@@ -75,6 +76,7 @@ class StartupReadinessManager(private val context: Context) {
             isReady = isReady,
             sttAvailable = sttAvailable,
             ttsOfflineVoiceAvailable = ttsOfflineVoiceAvailable,
+            googleTtsInstalled = googleTtsInstalled,
             vertexAiConfigured = vertexAiConfigured,
             errors = errors
         )

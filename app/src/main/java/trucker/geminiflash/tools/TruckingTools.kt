@@ -57,7 +57,7 @@ object TruckingTools {
             ),
             FunctionDeclaration(
                 name = "getCommunications",
-                description = "Returns communication information. Use 'messages' for dispatch inbox or 'contacts' for support department phone numbers.",
+                description = "Returns communication information (read-only). Use 'messages' for dispatch inbox or 'contacts' for support department phone numbers. To send a message to the Driver Leader, use messageDriverLeader instead.",
                 parameters = Schema(
                     type = "OBJECT",
                     properties = mapOf(
@@ -84,6 +84,28 @@ object TruckingTools {
                 parameters = Schema(
                     type = "OBJECT",
                     properties = emptyMap()
+                )
+            ),
+            FunctionDeclaration(
+                name = "messageDriverLeader",
+                description = "Sends a message to the driver's Driver Leader on the driver's behalf (in-cab macro / driver portal). Use when the driver asks to tell, message, notify, or send a note to their driver leader. Write the message in first person from the driver's words; do not add facts they did not state.",
+                parameters = Schema(
+                    type = "OBJECT",
+                    properties = mapOf(
+                        "message" to Schema(
+                            type = "STRING",
+                            description = "Message body to send, in first person as dictated by the driver"
+                        ),
+                        "subject" to Schema(
+                            type = "STRING",
+                            description = "Optional short subject; omit to auto-generate from the message"
+                        ),
+                        "priority" to Schema(
+                            type = "STRING",
+                            description = "Optional priority: 'normal' (default) or 'urgent'"
+                        )
+                    ),
+                    required = listOf("message")
                 )
             ),
             FunctionDeclaration(
@@ -607,6 +629,38 @@ object TruckingTools {
                         put("next_inspection_due", "2026-12-15")
                         put("days_until_due", 214)
                     })
+                }
+            }
+
+            "messageDriverLeader" -> {
+                val message = args?.get("message")?.jsonPrimitive?.contentOrNull?.trim()
+                    ?: throw IllegalArgumentException("message is required for messageDriverLeader")
+                if (message.isEmpty()) {
+                    throw IllegalArgumentException("message cannot be empty for messageDriverLeader")
+                }
+                val priority = args?.get("priority")?.jsonPrimitive?.contentOrNull?.lowercase() ?: "normal"
+                val subject = args?.get("subject")?.jsonPrimitive?.contentOrNull?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: message.take(48).let { if (message.length > 48) "$it..." else it }
+
+                buildJsonObject {
+                    put("status", "sent")
+                    put("message_id", "DL-${System.currentTimeMillis() % 100000}")
+                    put("driver_id", DEMO_DRIVER_ID)
+                    put("recipient", buildJsonObject {
+                        put("name", "Sarah Jenkins")
+                        put("role", "Driver Leader")
+                        put("contact_method", "In-cab Macro or Driver Portal")
+                    })
+                    put("channel", "In-cab Macro")
+                    put("priority", if (priority == "urgent") "urgent" else "normal")
+                    put("subject", subject)
+                    put("message", message)
+                    put("sent_at", "2026-05-15T14:25")
+                    put(
+                        "confirmation",
+                        "Message sent to Sarah Jenkins, your Driver Leader."
+                    )
                 }
             }
 

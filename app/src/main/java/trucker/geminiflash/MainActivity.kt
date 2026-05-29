@@ -9,37 +9,61 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import trucker.geminiflash.audio.NoiseProfile
 import trucker.geminiflash.controller.AiState
+import trucker.geminiflash.controller.AnswerMode
+import trucker.geminiflash.controller.CopilotUiState
 import trucker.geminiflash.startup.StartupReadinessManager
 import trucker.geminiflash.ui.theme.MyApplicationTheme
-import trucker.geminiflash.audio.NoiseProfile
 
 class MainActivity : ComponentActivity() {
 
@@ -49,7 +73,6 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (!isGranted) {
-            // If permission denied, the app can't function; UI will show a warning
             android.util.Log.w("MainActivity", "Audio recording permission denied")
         }
     }
@@ -58,7 +81,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Request audio permission upfront
         permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
 
         setContent {
@@ -67,8 +89,7 @@ class MainActivity : ComponentActivity() {
                 val vm: GeminiViewModel = viewModel()
                 viewModel = vm
 
-                // Set up close app callback
-                LaunchedEffect(Unit) {
+                androidx.compose.runtime.LaunchedEffect(Unit) {
                     vm.setCloseAppCallback {
                         closeApp()
                     }
@@ -90,8 +111,6 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // Samsung Galaxy Tab Active 5 Active Key (XCover key) = 1001
-        // Also support common programmable headset/PTT buttons
         if (keyCode == 1001 || keyCode == KeyEvent.KEYCODE_HEADSETHOOK || keyCode == KeyEvent.KEYCODE_BUTTON_1) {
             if (::viewModel.isInitialized) {
                 viewModel.onActiveKeyPressed()
@@ -126,16 +145,7 @@ fun LoadingScreen() {
             .background(Color.Black),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(color = Color(0xFF00E676), modifier = Modifier.size(64.dp))
-            Spacer(modifier = Modifier.height(24.dp))
-            Text(
-                text = "Checking offline voice models...",
-                color = Color.White,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
+        CircularProgressIndicator(color = Color(0xFF00E676), modifier = Modifier.size(64.dp))
     }
 }
 
@@ -144,22 +154,10 @@ fun ReadinessScreen(
     report: StartupReadinessManager.ReadinessReport,
     onRecheck: () -> Unit
 ) {
-    // Determine contextual title based on what actually failed
-    val hasVoiceIssue = !report.sttAvailable || !report.ttsOfflineVoiceAvailable
-    val hasConfigIssue = !report.vertexAiConfigured
-
-    val title = when {
-        hasVoiceIssue && hasConfigIssue -> "SETUP INCOMPLETE"
-        hasVoiceIssue -> "OFFLINE VOICE MODELS MISSING"
-        hasConfigIssue -> "VERTEX AI NOT CONFIGURED"
-        else -> "STARTUP CHECK FAILED"
-    }
-
-    val subtitle = when {
-        hasVoiceIssue && hasConfigIssue -> "Voice models and Vertex AI configuration need attention. See errors below."
-        hasVoiceIssue -> "Connect to terminal Wi-Fi to download the required Google/Samsung voice packs (~150MB)."
-        hasConfigIssue -> "Vertex AI service account is missing or misconfigured. See errors below."
-        else -> "One or more startup checks failed. See errors below."
+    val ttsTint = when {
+        report.ttsOfflineVoiceAvailable && report.googleTtsInstalled -> Color(0xFF00E676)
+        report.ttsOfflineVoiceAvailable -> Color(0xFFFFC107)
+        else -> Color(0xFFFF5252)
     }
 
     Box(
@@ -170,110 +168,74 @@ fun ReadinessScreen(
     ) {
         Column(
             modifier = Modifier.padding(32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(32.dp)
         ) {
             Icon(
                 imageVector = Icons.Default.Warning,
-                contentDescription = "Warning",
+                contentDescription = null,
                 tint = Color(0xFFFF5252),
                 modifier = Modifier.size(96.dp)
             )
-            Spacer(modifier = Modifier.height(24.dp))
-            Text(
-                text = title,
-                color = Color(0xFFFF5252),
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Black,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = subtitle,
-                color = Color.White,
-                fontSize = 20.sp,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(32.dp))
-            report.errors.forEach { error ->
-                Surface(
-                    color = Color(0xFF2D2D2D),
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                ) {
-                    Text(
-                        text = error,
-                        color = Color(0xFFFFB74D),
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(16.dp),
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(32.dp))
-            Button(
-                onClick = onRecheck,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676)),
-                modifier = Modifier.fillMaxWidth(0.8f)
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(48.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.Black)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Re-check Readiness", color = Color.Black, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                ReadinessCheckIcon(
+                    icon = Icons.Default.Mic,
+                    tint = if (report.sttAvailable) Color(0xFF00E676) else Color(0xFFFF5252)
+                )
+                ReadinessCheckIcon(
+                    icon = Icons.AutoMirrored.Filled.VolumeUp,
+                    tint = ttsTint
+                )
+                ReadinessCheckIcon(
+                    icon = Icons.Default.Cloud,
+                    tint = if (report.vertexAiConfigured) Color(0xFF00E676) else Color(0xFFFF5252)
+                )
+            }
+
+            IconButton(onClick = onRecheck) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = null,
+                    tint = Color(0xFF00E676),
+                    modifier = Modifier.size(48.dp)
+                )
             }
         }
     }
 }
 
 @Composable
+private fun ReadinessCheckIcon(icon: ImageVector, tint: Color) {
+    Box(
+        modifier = Modifier
+            .size(72.dp)
+            .clip(CircleShape)
+            .background(tint.copy(alpha = 0.15f))
+            .border(3.dp, tint, CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(36.dp)
+        )
+    }
+}
+
+@Composable
 fun CopilotApp(viewModel: GeminiViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val partialText by viewModel.partialText.collectAsStateWithLifecycle()
-    val logs by viewModel.logs.collectAsStateWithLifecycle()
+    val noiseProfile = viewModel.getNoiseProfile()
 
-    // Developer log toggle (5-tap on the top-left corner)
-    var tapCount by remember { mutableIntStateOf(0) }
-    var showLogs by remember { mutableStateOf(false) }
-    LaunchedEffect(tapCount) {
-        if (tapCount >= 5) {
-            showLogs = !showLogs
-            tapCount = 0
-        }
-    }
-
-    // Answer mode toggle
-    var showAnswerModeDialog by remember { mutableStateOf(false) }
-    
-    // Noise profile toggle
-    var showNoiseProfileDialog by remember { mutableStateOf(false) }
-
-    // Background color subtly shifts with state for peripheral visibility
     val bgColor = when (uiState.aiState) {
-        AiState.LISTENING -> Color(0xFF0A1F0A) // very dark green tint
-        AiState.CHECKING_DATA -> Color(0xFF1F1F0A) // very dark yellow tint
-        AiState.SPEAKING -> Color(0xFF0A0A1F) // very dark blue tint
-    }
-
-    // Answer mode dialog
-    if (showAnswerModeDialog) {
-        AnswerModeDialog(
-            currentMode = uiState.answerMode,
-            onDismiss = { showAnswerModeDialog = false },
-            onModeSelected = { mode ->
-                viewModel.setAnswerMode(mode)
-                showAnswerModeDialog = false
-            }
-        )
-    }
-
-    // Noise profile dialog
-    if (showNoiseProfileDialog) {
-        NoiseProfileDialog(
-            currentProfile = viewModel.getNoiseProfile(),
-            onDismiss = { showNoiseProfileDialog = false },
-            onProfileSelected = { profile ->
-                viewModel.setNoiseProfile(profile)
-                showNoiseProfileDialog = false
-            }
-        )
+        AiState.LISTENING -> Color(0xFF0A1F0A)
+        AiState.CHECKING_DATA -> Color(0xFF1F1F0A)
+        AiState.SPEAKING -> Color(0xFF0A0A1F)
     }
 
     Box(
@@ -287,146 +249,130 @@ fun CopilotApp(viewModel: GeminiViewModel) {
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top bar with hidden tap area and settings buttons
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Hidden tap area for developer logs
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clickable { tapCount++ }
+                NoiseProfileChip(
+                    profile = noiseProfile,
+                    onClick = { viewModel.setNoiseProfile(noiseProfile.nextInCycle()) }
                 )
-                
-                // Noise profile button
-                Surface(
-                    modifier = Modifier
-                        .clickable { showNoiseProfileDialog = true }
-                        .padding(4.dp),
-                    shape = MaterialTheme.shapes.small,
-                    color = Color(0xFF2D2D2D)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Mic,
-                            contentDescription = "Noise Profile",
-                            tint = Color(0xFFFFC107),
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = viewModel.getNoiseProfile().label,
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                Spacer(modifier = Modifier.width(8.dp))
+                AnswerModeChip(
+                    mode = uiState.answerMode,
+                    onClick = {
+                        val next = if (uiState.answerMode == AnswerMode.SHORT) {
+                            AnswerMode.LONG
+                        } else {
+                            AnswerMode.SHORT
+                        }
+                        viewModel.setAnswerMode(next)
                     }
-                }
-                
-                // Answer mode button
-                Surface(
-                    modifier = Modifier
-                        .clickable { showAnswerModeDialog = true }
-                        .padding(4.dp),
-                    shape = MaterialTheme.shapes.small,
-                    color = Color(0xFF2D2D2D)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Answer Mode",
-                            tint = Color(0xFF00E676),
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = uiState.answerMode.label,
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Large State Indicator
-            StateIndicator(uiState.aiState, uiState.currentTool)
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Partial STT text — lets driver know they're being heard
-            if (partialText.isNotBlank() && uiState.aiState == AiState.LISTENING) {
-                Text(
-                    text = partialText,
-                    color = Color(0xFF81C784),
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                )
-            }
-
-            // User / Gemini text summary
-            if (uiState.userText.isNotBlank()) {
-                Text(
-                    text = "You: ${uiState.userText}",
-                    color = Color.Gray,
-                    fontSize = 16.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                )
-            }
-            if (uiState.geminiText.isNotBlank() && uiState.aiState == AiState.SPEAKING) {
-                Text(
-                    text = "Copilot: ${uiState.geminiText.take(120)}...",
-                    color = Color(0xFF64B5F6),
-                    fontSize = 16.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                )
-            }
-
-            // Error display
-            if (uiState.lastError.isNotBlank()) {
-                Text(
-                    text = uiState.lastError,
-                    color = Color(0xFFFF5252),
-                    fontSize = 16.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Debug log console (hidden by default)
-            if (showLogs) {
-                LogConsole(logs = logs)
-            }
+            StateIndicator(
+                state = uiState.aiState,
+                hasError = uiState.lastError.isNotBlank()
+            )
 
-            // Bottom status bar
-            StatusBar(uiState)
+            Spacer(modifier = Modifier.weight(1f))
+
+            ConnectionStatusDots(uiState = uiState)
         }
     }
 }
 
 @Composable
-fun StateIndicator(state: AiState, currentTool: String) {
+private fun NoiseProfileChip(profile: NoiseProfile, onClick: () -> Unit) {
+    val barCount = profile.noiseBarCount()
+    Surface(
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(4.dp),
+        shape = MaterialTheme.shapes.small,
+        color = Color(0xFF2D2D2D)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Mic,
+                contentDescription = null,
+                tint = Color(0xFFFFC107),
+                modifier = Modifier.size(20.dp)
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                repeat(3) { index ->
+                    Box(
+                        modifier = Modifier
+                            .width(4.dp)
+                            .height((8 + index * 4).dp)
+                            .background(
+                                if (index < barCount) Color(0xFFFFC107) else Color(0xFF555555),
+                                RoundedCornerShape(1.dp)
+                            )
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AnswerModeChip(mode: AnswerMode, onClick: () -> Unit) {
+    val barCount = if (mode == AnswerMode.SHORT) 1 else 2
+    Surface(
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(4.dp),
+        shape = MaterialTheme.shapes.small,
+        color = Color(0xFF2D2D2D),
+        border = androidx.compose.foundation.BorderStroke(
+            width = if (mode == AnswerMode.LONG) 2.dp else 0.dp,
+            color = Color(0xFF00E676)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Settings,
+                contentDescription = null,
+                tint = Color(0xFF00E676),
+                modifier = Modifier.size(20.dp)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                repeat(2) { index ->
+                    Box(
+                        modifier = Modifier
+                            .width(if (index < barCount) 14.dp else 8.dp)
+                            .height(4.dp)
+                            .background(
+                                if (index < barCount) Color(0xFF00E676) else Color(0xFF555555),
+                                RoundedCornerShape(1.dp)
+                            )
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StateIndicator(state: AiState, hasError: Boolean) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
 
     val color = when (state) {
@@ -439,13 +385,6 @@ fun StateIndicator(state: AiState, currentTool: String) {
         AiState.LISTENING -> Icons.Default.Mic
         AiState.CHECKING_DATA -> Icons.Default.Settings
         AiState.SPEAKING -> Icons.AutoMirrored.Filled.VolumeUp
-    }
-
-    val label = when (state) {
-        AiState.LISTENING -> "LISTENING..."
-        AiState.CHECKING_DATA -> if (currentTool.isNotEmpty()) currentTool.replace(Regex("([A-Z])"), " $1").uppercase()
-        else "CHECKING DATA..."
-        AiState.SPEAKING -> "SPEAKING..."
     }
 
     val scale by infiniteTransition.animateFloat(
@@ -468,10 +407,20 @@ fun StateIndicator(state: AiState, currentTool: String) {
         label = "rotation"
     )
 
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    val orbSize = if (hasError) 288.dp else 280.dp
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.size(orbSize)
     ) {
+        if (hasError) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+                    .border(4.dp, Color(0xFFFF5252), CircleShape)
+            )
+        }
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
@@ -490,305 +439,56 @@ fun StateIndicator(state: AiState, currentTool: String) {
                 tint = color
             )
         }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Text(
-            text = label,
-            style = MaterialTheme.typography.displaySmall,
-            fontWeight = FontWeight.Black,
-            color = color,
-            textAlign = TextAlign.Center
-        )
     }
 }
 
 @Composable
-fun StatusBar(uiState: trucker.geminiflash.controller.CopilotUiState) {
+fun ConnectionStatusDots(uiState: CopilotUiState) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = uiState.status,
-            style = MaterialTheme.typography.labelLarge,
-            color = Color(0xFF81C784)
+        val connected = uiState.status == "Connected"
+        StatusDot(
+            color = if (connected) Color(0xFF00E676) else Color(0xFF555555),
+            modifier = Modifier.padding(horizontal = 6.dp)
         )
-        if (uiState.currentTool.isNotEmpty()) {
-            Text(
-                text = uiState.currentTool,
-                style = MaterialTheme.typography.labelMedium,
-                color = Color(0xFF64B5F6)
+        if (uiState.aiState == AiState.CHECKING_DATA) {
+            StatusDot(
+                color = Color(0xFFFFC107),
+                modifier = Modifier.padding(horizontal = 6.dp)
+            )
+        }
+        if (uiState.lastError.isNotBlank()) {
+            StatusDot(
+                color = Color(0xFFFF5252),
+                modifier = Modifier.padding(horizontal = 6.dp)
             )
         }
     }
 }
 
 @Composable
-fun LogConsole(logs: List<String>) {
-    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-    LaunchedEffect(logs.size) {
-        if (logs.isNotEmpty()) {
-            listState.animateScrollToItem(logs.size - 1)
-        }
-    }
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(180.dp),
-        shape = MaterialTheme.shapes.small,
-        color = Color.Black
-    ) {
-        androidx.compose.foundation.lazy.LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(8.dp)
-        ) {
-            items(
-                count = logs.size,
-                itemContent = { index ->
-                    Text(
-                        text = logs[index],
-                        color = Color(0xFF00FF00),
-                        fontSize = 10.sp,
-                        lineHeight = 12.sp
-                    )
-                }
-            )
-        }
-    }
-}
-
-@Composable
-fun AnswerModeDialog(
-    currentMode: trucker.geminiflash.controller.AnswerMode,
-    onDismiss: () -> Unit,
-    onModeSelected: (trucker.geminiflash.controller.AnswerMode) -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "Answer Mode",
-                fontWeight = FontWeight.Bold,
-                fontSize = 24.sp
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "Choose how detailed the copilot's responses should be:",
-                    fontSize = 16.sp,
-                    color = Color.Gray
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                // Short mode option
-                AnswerModeOption(
-                    mode = trucker.geminiflash.controller.AnswerMode.SHORT,
-                    isSelected = currentMode == trucker.geminiflash.controller.AnswerMode.SHORT,
-                    title = "Short Answers",
-                    description = "Brief, 1-2 sentence responses. Best for quick questions while driving.",
-                    onClick = { onModeSelected(trucker.geminiflash.controller.AnswerMode.SHORT) }
-                )
-                
-                // Long mode option
-                AnswerModeOption(
-                    mode = trucker.geminiflash.controller.AnswerMode.LONG,
-                    isSelected = currentMode == trucker.geminiflash.controller.AnswerMode.LONG,
-                    title = "Detailed Answers",
-                    description = "Comprehensive responses with additional context and information.",
-                    onClick = { onModeSelected(trucker.geminiflash.controller.AnswerMode.LONG) }
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close", fontSize = 16.sp)
-            }
-        },
-        containerColor = Color(0xFF1A1A1A),
-        titleContentColor = Color.White,
-        textContentColor = Color.White
+private fun StatusDot(color: Color, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(12.dp)
+            .clip(CircleShape)
+            .background(color)
     )
 }
 
-@Composable
-fun AnswerModeOption(
-    mode: trucker.geminiflash.controller.AnswerMode,
-    isSelected: Boolean,
-    title: String,
-    description: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = MaterialTheme.shapes.medium,
-        color = if (isSelected) Color(0xFF00E676).copy(alpha = 0.2f) else Color(0xFF2D2D2D),
-        border = androidx.compose.foundation.BorderStroke(
-            width = 2.dp,
-            color = if (isSelected) Color(0xFF00E676) else Color.Transparent
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isSelected) Color(0xFF00E676) else Color.White
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = description,
-                    fontSize = 14.sp,
-                    color = Color.Gray
-                )
-            }
-            
-            if (isSelected) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "Selected",
-                    tint = Color(0xFF00E676),
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
-    }
+private fun NoiseProfile.nextInCycle(): NoiseProfile = when (this) {
+    NoiseProfile.QUIET -> NoiseProfile.NORMAL
+    NoiseProfile.NORMAL -> NoiseProfile.LOUD_TRUCK
+    NoiseProfile.LOUD_TRUCK, NoiseProfile.CUSTOM -> NoiseProfile.QUIET
 }
 
-
-@Composable
-fun NoiseProfileDialog(
-    currentProfile: NoiseProfile,
-    onDismiss: () -> Unit,
-    onProfileSelected: (NoiseProfile) -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "Noise Profile",
-                fontWeight = FontWeight.Bold,
-                fontSize = 24.sp
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "Select the noise level for your current driving environment:",
-                    fontSize = 16.sp,
-                    color = Color.Gray
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                // Quiet mode option
-                NoiseProfileOption(
-                    profile = NoiseProfile.QUIET,
-                    isSelected = currentProfile == NoiseProfile.QUIET,
-                    title = "Quiet",
-                    description = "Office/home environment. Shorter silence timeout (800ms).",
-                    onClick = { onProfileSelected(NoiseProfile.QUIET) }
-                )
-                
-                // Normal mode option
-                NoiseProfileOption(
-                    profile = NoiseProfile.NORMAL,
-                    isSelected = currentProfile == NoiseProfile.NORMAL,
-                    title = "Normal",
-                    description = "Regular city/suburban driving. Standard timeout (1000ms).",
-                    onClick = { onProfileSelected(NoiseProfile.NORMAL) }
-                )
-                
-                // Loud truck mode option
-                NoiseProfileOption(
-                    profile = NoiseProfile.LOUD_TRUCK,
-                    isSelected = currentProfile == NoiseProfile.LOUD_TRUCK,
-                    title = "Loud Truck",
-                    description = "Highway/high noise. Longer timeout (1500ms) to capture full speech.",
-                    onClick = { onProfileSelected(NoiseProfile.LOUD_TRUCK) }
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close", fontSize = 16.sp)
-            }
-        },
-        containerColor = Color(0xFF1A1A1A),
-        titleContentColor = Color.White,
-        textContentColor = Color.White
-    )
-}
-
-@Composable
-fun NoiseProfileOption(
-    profile: NoiseProfile,
-    isSelected: Boolean,
-    title: String,
-    description: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = MaterialTheme.shapes.medium,
-        color = if (isSelected) Color(0xFFFFC107).copy(alpha = 0.2f) else Color(0xFF2D2D2D),
-        border = androidx.compose.foundation.BorderStroke(
-            width = 2.dp,
-            color = if (isSelected) Color(0xFFFFC107) else Color.Transparent
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isSelected) Color(0xFFFFC107) else Color.White
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = description,
-                    fontSize = 14.sp,
-                    color = Color.Gray
-                )
-            }
-            
-            if (isSelected) {
-                Icon(
-                    imageVector = Icons.Default.Mic,
-                    contentDescription = "Selected",
-                    tint = Color(0xFFFFC107),
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
-    }
+private fun NoiseProfile.noiseBarCount(): Int = when (this) {
+    NoiseProfile.QUIET -> 1
+    NoiseProfile.NORMAL -> 2
+    NoiseProfile.LOUD_TRUCK, NoiseProfile.CUSTOM -> 3
 }

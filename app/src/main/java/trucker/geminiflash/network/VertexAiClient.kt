@@ -71,7 +71,7 @@ class VertexAiClient(private val context: Context) {
     suspend fun sendMessageStream(
         textInput: String,
         history: List<Content> = emptyList(),
-        answerMode: trucker.geminiflash.controller.AnswerMode = trucker.geminiflash.controller.AnswerMode.LONG,
+          answerMode: trucker.geminiflash.controller.AnswerMode = trucker.geminiflash.controller.AnswerMode.LONG,
         onDelta: (String) -> Unit
     ): GeminiResponse = withContext(Dispatchers.IO) {
         try {
@@ -297,7 +297,8 @@ class VertexAiClient(private val context: Context) {
             - getLoadInformation: Load details based on type (current/next) with BOL numbers, stops, ETAs, and route risks
             - getFinancials: Financial information by period (current/ytd/bonus) including pay, accessorials, and safety bonus details
             - getRouteConditions: Route planning with traffic/weather conditions and recommended fuel stops with amenities
-            - getCommunications: Communication data (messages/contacts) including dispatch inbox and support department phone numbers
+            - getCommunications: Communication data (messages/contacts) including dispatch inbox and support department phone numbers (read-only)
+            - messageDriverLeader: Send a message to the Driver Leader on the driver's behalf from what they dictated
             - getCompanyResources: Company information by category (policies/mentor/ownerOperator/training) including FAQs and program details
             - getComplianceStatus: Compliance-focused data including HOS alerts, medical card status, DVIR requirements, and inspection scheduling
             - closeApp: Close the application when driver requests it
@@ -339,19 +340,26 @@ class VertexAiClient(private val context: Context) {
 
             ### 6. getCommunications (Dispatch & Support)
             - Use for: Dispatch messages (gate codes, instructions, subject/body), unread message filtering, and contact info for support departments (payroll, breakdown, driver leader).
+            - NOT for: Sending or dictating a message to the driver leader — use messageDriverLeader for that.
             - Parameter `type`: "messages" for inbox, "contacts" for phone numbers.
             - Examples: "Any messages from dispatch?", "What's the number for payroll?", "How do I reach breakdown?", "Who is my driver leader?", "What's the gate code for the customer?", "Read my unread messages.", "Who is my fleet leader?".
 
-            ### 7. getCompanyResources (Policies & Training)
+            ### 7. messageDriverLeader (Send to Driver Leader)
+            - Use when: The driver wants you to tell, message, notify, or send a note to their Driver Leader. Compose `message` in first person from what they said; do not invent details.
+            - Parameter `message` (required): The text to send. Parameter `priority`: "urgent" only if they indicate urgency. Parameter `subject`: optional; omit unless they give one.
+            - After the tool returns: Confirm delivery in ONE sentence (e.g., "10-4, I sent that to Sarah Jenkins.").
+            - Examples: "Tell my driver leader I'm running two hours late.", "Message Sarah I need approval for a layover in Flagstaff.", "Let my driver leader know the receiver won't unload until morning.", "Send an urgent note to my DL that I have a check engine light."
+
+            ### 8. getCompanyResources (Policies & Training)
             - Use for: Company rules (pets, riders, breakdown SOP), terminal info (parking capacity, amenities, shop status), mentor program, owner operator/lease programs, and training modules/videos (progress, links, deadlines).
             - Parameter `category`: "policies" (FAQs), "mentor", "ownerOperator" (lease), "training".
             - Examples: "What is the pet policy?", "Can I have a rider?", "Tell me about the mentor program.", "How do I become an owner operator?", "Do I have any training modules?", "Are there any safety videos I need to watch?", "Is the shop open at the terminal?", "How much parking is left at the terminal?", "What's the breakdown protocol?".
 
-            ### 8. getComplianceStatus (HOS, Medical, & Compliance)
+            ### 9. getComplianceStatus (HOS, Medical, & Compliance)
             - Use for: Hours of Service remaining (drive/duty/cycle), 30-min break clock, 7-day HOS recap, HOS alerts (violations/warnings), medical card status (expiry, renewal window, preferred clinics), annual inspection status, and DVIR submission status. This is the authoritative source for all regulatory compliance data.
             - Examples: "How much drive time left?", "When is my next break?", "Tell me about my HOS recap for next week.", "When does my medical card expire?", "Where can I get my DOT physical?", "Is my DVIR submitted?", "When is my tractor inspection due?", "Do I have any HOS alerts?", "When can I renew my medical card?", "Do I need a DOT physical?".
 
-            ### 9. closeApp (Exit)
+            ### 10. closeApp (Exit)
             - Use for: Closing the application.
             - Examples: "Close the app.", "Goodbye.", "I'm done.", "Quit.".
 
