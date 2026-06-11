@@ -9,7 +9,7 @@ import kotlinx.coroutines.launch
 import trucker.geminiflash.audio.SttManager
 import trucker.geminiflash.audio.TtsManager
 import trucker.geminiflash.audio.NoiseProfile
-import trucker.geminiflash.controller.AiState
+import trucker.geminiflash.controller.AnswerMode
 import trucker.geminiflash.controller.CoPilotController
 import trucker.geminiflash.controller.CopilotUiState
 import trucker.geminiflash.startup.StartupReadinessManager
@@ -36,8 +36,6 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
 
     // Exposed UI state from controller
     val uiState: StateFlow<CopilotUiState> = controller.uiState
-    val partialText: StateFlow<String> = controller.partialText
-    val logs: StateFlow<List<String>> = controller.logs
 
     // Startup readiness
     private val _readinessReport = MutableStateFlow<StartupReadinessManager.ReadinessReport?>(null)
@@ -79,15 +77,6 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
         ttsManager.speak(hint)
     }
 
-    fun startSession() {
-        if (!isSpeechReady()) return
-        controller.start()
-    }
-
-    fun stopSession() {
-        controller.stop()
-    }
-
     fun onActiveKeyPressed() {
         if (!isSpeechReady()) return
         controller.onActiveKeyPressed()
@@ -102,24 +91,19 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
         closeAppCallback = callback
     }
 
-    fun setAnswerMode(mode: trucker.geminiflash.controller.AnswerMode) {
+    fun setAnswerMode(mode: AnswerMode) {
         controller.setAnswerMode(mode)
     }
 
-    fun setNoiseProfile(profile: trucker.geminiflash.audio.NoiseProfile) {
+    fun setNoiseProfile(profile: NoiseProfile) {
         controller.setNoiseProfile(profile)
     }
 
-    fun getNoiseProfile(): trucker.geminiflash.audio.NoiseProfile {
+    fun getNoiseProfile(): NoiseProfile {
         return controller.getNoiseProfile()
     }
 
     
-    fun addLog(message: String) {
-        // Controller owns the logs; this is a convenience bridge for external log injection
-        // Not needed for normal flow, but kept for compatibility if any external component needs it.
-    }
-
     override fun onCleared() {
         super.onCleared()
         controller.destroy()

@@ -12,12 +12,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.util.Locale
 
-/**
- * Silence timeout configuration for trucking environment.
- * Set to 2500ms to prevent cutting off speech during natural pauses.
- */
-private const val SILENCE_TIMEOUT_MS = 2500L
-
 class SttManager(context: Context) {
     private val appContext = context.applicationContext
     private var speechRecognizer: SpeechRecognizer? = null
@@ -33,6 +27,7 @@ class SttManager(context: Context) {
     private var onError: ((Int) -> Unit)? = null
 
     private var isOfflineAvailable = false
+    private var currentNoiseProfile = NoiseProfile.LOUD_TRUCK
 
     init {
         isOfflineAvailable = SpeechRecognizer.isOnDeviceRecognitionAvailable(appContext)
@@ -51,6 +46,13 @@ class SttManager(context: Context) {
     }
 
     fun isOfflineRecognitionAvailable(): Boolean = isOfflineAvailable
+
+    fun setNoiseProfile(profile: NoiseProfile) {
+        currentNoiseProfile = profile
+        Log.d("SttManager", "Noise profile set to: ${profile.label}")
+    }
+
+    fun getNoiseProfile(): NoiseProfile = currentNoiseProfile
 
     private fun initializeRecognizer() {
         if (speechRecognizer != null) {
@@ -150,14 +152,14 @@ class SttManager(context: Context) {
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1000L)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, SILENCE_TIMEOUT_MS)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, SILENCE_TIMEOUT_MS)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, currentNoiseProfile.silenceMs)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, currentNoiseProfile.silenceMs)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
 
         try {
             speechRecognizer?.startListening(intent)
-            Log.d("SttManager", "Started listening (silence timeout: ${SILENCE_TIMEOUT_MS}ms)")
+            Log.d("SttManager", "Started listening (silence timeout: ${currentNoiseProfile.silenceMs}ms)")
         } catch (e: Exception) {
             Log.e("SttManager", "Failed to start listening", e)
             _isListening.value = false

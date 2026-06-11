@@ -1,6 +1,7 @@
 package trucker.geminiflash.controller
 
 import android.content.Context
+import android.speech.SpeechRecognizer
 import android.util.Log
 import com.google.genai.types.Content
 import com.google.genai.types.Part
@@ -80,8 +81,8 @@ class CoPilotController(
             onError = { errorCode ->
                 addLog("STT Error: $errorCode")
                 _partialText.value = ""
-                if (errorCode == android.speech.SpeechRecognizer.ERROR_NETWORK ||
-                    errorCode == android.speech.SpeechRecognizer.ERROR_NETWORK_TIMEOUT
+                if (errorCode == SpeechRecognizer.ERROR_NETWORK ||
+                    errorCode == SpeechRecognizer.ERROR_NETWORK_TIMEOUT
                 ) {
                     addLog("Offline-only STT policy: network recognizer path blocked")
                     updateUi {
