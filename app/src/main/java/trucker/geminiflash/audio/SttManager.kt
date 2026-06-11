@@ -13,46 +13,10 @@ import kotlinx.coroutines.flow.StateFlow
 import java.util.Locale
 
 /**
- * Noise profile presets for different driving conditions.
- * Adjusts silence timeout to prevent cutting off speech mid-sentence.
+ * Silence timeout configuration for trucking environment.
+ * Set to 2500ms to prevent cutting off speech during natural pauses.
  */
-enum class NoiseProfile(
-    val label: String,
-    val silenceTimeoutMs: Long,
-    val possiblyCompleteTimeoutMs: Long,
-    val description: String
-) {
-    QUIET(
-        label = "Quiet",
-        silenceTimeoutMs = 1400L,
-        possiblyCompleteTimeoutMs = 1400L,
-        description = "Office/home environment"
-    ),
-    NORMAL(
-        label = "Normal",
-        silenceTimeoutMs = 1800L,
-        possiblyCompleteTimeoutMs = 1800L,
-        description = "Regular city/suburban driving"
-    ),
-    LOUD_TRUCK(
-        label = "Loud Truck",
-        silenceTimeoutMs = 2500L,
-        possiblyCompleteTimeoutMs = 2500L,
-        description = "Highway/high noise truck environment"
-    ),
-    CUSTOM(
-        label = "Custom",
-        silenceTimeoutMs = 2000L,
-        possiblyCompleteTimeoutMs = 2000L,
-        description = "User-defined settings"
-    );
-
-    companion object {
-        fun fromLabel(label: String): NoiseProfile {
-            return values().firstOrNull { it.label == label } ?: LOUD_TRUCK
-        }
-    }
-}
+private const val SILENCE_TIMEOUT_MS = 2500L
 
 class SttManager(context: Context) {
     private val appContext = context.applicationContext
@@ -64,9 +28,6 @@ class SttManager(context: Context) {
 
     private val _isListening = MutableStateFlow(false)
     val isListening: StateFlow<Boolean> = _isListening
-
-    private val _currentNoiseProfile = MutableStateFlow(NoiseProfile.LOUD_TRUCK)
-    val currentNoiseProfile: StateFlow<NoiseProfile> = _currentNoiseProfile
 
     private var onFinalResult: ((String) -> Unit)? = null
     private var onError: ((Int) -> Unit)? = null
@@ -163,19 +124,7 @@ class SttManager(context: Context) {
         }
     }
 
-    /**
-     * Start listening with the current noise profile.
-     * Use [setNoiseProfile] to change the profile before calling this.
-     */
     fun startListening() {
-        startListeningWithProfile(_currentNoiseProfile.value)
-    }
-
-    /**
-     * Start listening with a specific noise profile.
-     * @param profile The noise profile to use for this listening session
-     */
-    fun startListeningWithProfile(profile: NoiseProfile) {
         if (_isListening.value) {
             Log.w("SttManager", "Already listening, skipping start")
             return
@@ -195,42 +144,26 @@ class SttManager(context: Context) {
             return
         }
 
-        _currentNoiseProfile.value = profile
-
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.US.toLanguageTag())
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1000L)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, profile.silenceTimeoutMs)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, profile.possiblyCompleteTimeoutMs)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, SILENCE_TIMEOUT_MS)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, SILENCE_TIMEOUT_MS)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
 
         try {
             speechRecognizer?.startListening(intent)
-            Log.d("SttManager", "Started listening with profile: ${profile.label} (silence timeout: ${profile.silenceTimeoutMs}ms)")
+            Log.d("SttManager", "Started listening (silence timeout: ${SILENCE_TIMEOUT_MS}ms)")
         } catch (e: Exception) {
             Log.e("SttManager", "Failed to start listening", e)
             _isListening.value = false
             onError?.invoke(SpeechRecognizer.ERROR_CLIENT)
         }
     }
-
-    /**
-     * Set the noise profile for future listening sessions.
-     * @param profile The noise profile to use
-     */
-    fun setNoiseProfile(profile: NoiseProfile) {
-        _currentNoiseProfile.value = profile
-        Log.d("SttManager", "Noise profile changed to: ${profile.label}")
-    }
-
-    /**
-     * Get the current noise profile.
-     */
-    fun getNoiseProfile(): NoiseProfile = _currentNoiseProfile.value
 
     fun stopListening() {
         if (!_isListening.value) return
