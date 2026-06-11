@@ -58,7 +58,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import trucker.geminiflash.audio.NoiseProfile
 import trucker.geminiflash.controller.AiState
 import trucker.geminiflash.controller.AnswerMode
 import trucker.geminiflash.controller.CopilotUiState
@@ -230,7 +229,6 @@ private fun ReadinessCheckIcon(icon: ImageVector, tint: Color) {
 @Composable
 fun CopilotApp(viewModel: GeminiViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val noiseProfile = viewModel.getNoiseProfile()
 
     val bgColor = when (uiState.aiState) {
         AiState.LISTENING -> Color(0xFF0A1F0A)
@@ -256,11 +254,6 @@ fun CopilotApp(viewModel: GeminiViewModel) {
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                NoiseProfileChip(
-                    profile = noiseProfile,
-                    onClick = { viewModel.setNoiseProfile(noiseProfile.nextInCycle()) }
-                )
-                Spacer(modifier = Modifier.width(8.dp))
                 AnswerModeChip(
                     mode = uiState.answerMode,
                     onClick = {
@@ -289,49 +282,8 @@ fun CopilotApp(viewModel: GeminiViewModel) {
 }
 
 @Composable
-private fun NoiseProfileChip(profile: NoiseProfile, onClick: () -> Unit) {
-    val barCount = profile.noiseBarCount()
-    Surface(
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .padding(4.dp),
-        shape = MaterialTheme.shapes.small,
-        color = Color(0xFF2D2D2D)
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Mic,
-                contentDescription = null,
-                tint = Color(0xFFFFC107),
-                modifier = Modifier.size(20.dp)
-            )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                repeat(3) { index ->
-                    Box(
-                        modifier = Modifier
-                            .width(4.dp)
-                            .height((8 + index * 4).dp)
-                            .background(
-                                if (index < barCount) Color(0xFFFFC107) else Color(0xFF555555),
-                                RoundedCornerShape(1.dp)
-                            )
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun AnswerModeChip(mode: AnswerMode, onClick: () -> Unit) {
-    val barCount = if (mode == AnswerMode.SHORT) 1 else 2
+    val isLong = mode == AnswerMode.LONG
     Surface(
         modifier = Modifier
             .clickable(onClick = onClick)
@@ -339,14 +291,14 @@ private fun AnswerModeChip(mode: AnswerMode, onClick: () -> Unit) {
         shape = MaterialTheme.shapes.small,
         color = Color(0xFF2D2D2D),
         border = androidx.compose.foundation.BorderStroke(
-            width = if (mode == AnswerMode.LONG) 2.dp else 0.dp,
+            width = if (isLong) 2.dp else 0.dp,
             color = Color(0xFF00E676)
         )
     ) {
-        Column(
+        Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = Icons.Default.Settings,
@@ -354,19 +306,11 @@ private fun AnswerModeChip(mode: AnswerMode, onClick: () -> Unit) {
                 tint = Color(0xFF00E676),
                 modifier = Modifier.size(20.dp)
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                repeat(2) { index ->
-                    Box(
-                        modifier = Modifier
-                            .width(if (index < barCount) 14.dp else 8.dp)
-                            .height(4.dp)
-                            .background(
-                                if (index < barCount) Color(0xFF00E676) else Color(0xFF555555),
-                                RoundedCornerShape(1.dp)
-                            )
-                    )
-                }
-            }
+            androidx.compose.material3.Text(
+                text = "${mode.label} Answer",
+                color = Color(0xFF00E676),
+                style = MaterialTheme.typography.labelMedium
+            )
         }
     }
 }
@@ -481,14 +425,4 @@ private fun StatusDot(color: Color, modifier: Modifier = Modifier) {
     )
 }
 
-private fun NoiseProfile.nextInCycle(): NoiseProfile = when (this) {
-    NoiseProfile.QUIET -> NoiseProfile.NORMAL
-    NoiseProfile.NORMAL -> NoiseProfile.LOUD_TRUCK
-    NoiseProfile.LOUD_TRUCK, NoiseProfile.CUSTOM -> NoiseProfile.QUIET
-}
 
-private fun NoiseProfile.noiseBarCount(): Int = when (this) {
-    NoiseProfile.QUIET -> 1
-    NoiseProfile.NORMAL -> 2
-    NoiseProfile.LOUD_TRUCK, NoiseProfile.CUSTOM -> 3
-}

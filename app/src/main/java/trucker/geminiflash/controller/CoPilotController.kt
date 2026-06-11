@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import trucker.geminiflash.audio.SttManager
 import trucker.geminiflash.audio.TtsManager
-import trucker.geminiflash.audio.NoiseProfile
 import trucker.geminiflash.network.*
 import trucker.geminiflash.tools.TruckingTools
 import kotlinx.serialization.json.*
@@ -42,16 +41,6 @@ class CoPilotController(
         settingsManager.setAnswerMode(mode)
         updateUi { it.copy(answerMode = mode) }
         addLog("Answer mode: ${mode.label}")
-    }
-
-    fun setNoiseProfile(profile: NoiseProfile) {
-        sttManager.setNoiseProfile(profile)
-        settingsManager.setNoiseProfile(profile)
-        addLog("Noise profile: ${profile.label}")
-    }
-
-    fun getNoiseProfile(): NoiseProfile {
-        return sttManager.getNoiseProfile()
     }
 
     private val _uiState = MutableStateFlow(CopilotUiState(answerMode = settingsManager.getAnswerMode()))
@@ -139,11 +128,6 @@ class CoPilotController(
         shouldCloseAppAfterTts = false
         _logs.value = emptyList()
         _partialText.value = ""
-        
-        // Initialize noise profile from settings
-        val savedProfile = settingsManager.getNoiseProfile()
-        sttManager.setNoiseProfile(savedProfile)
-        addLog("Noise profile: ${savedProfile.label}")
         
         updateUi {
             it.copy(
