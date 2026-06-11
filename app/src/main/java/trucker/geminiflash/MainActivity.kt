@@ -241,6 +241,16 @@ fun CopilotApp(viewModel: GeminiViewModel) {
             .fillMaxSize()
             .background(bgColor)
     ) {
+        // Version number in bottom-left corner
+        androidx.compose.material3.Text(
+            text = "v1.0",
+            color = Color(0xFF666666),
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(16.dp)
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
