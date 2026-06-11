@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import trucker.geminiflash.audio.SttManager
 import trucker.geminiflash.audio.TtsManager
+import trucker.geminiflash.audio.NoiseProfile
 import trucker.geminiflash.controller.AiState
 import trucker.geminiflash.controller.CoPilotController
 import trucker.geminiflash.controller.CopilotUiState
@@ -45,6 +46,8 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
     private val _isCheckingReadiness = MutableStateFlow(true)
     val isCheckingReadiness: StateFlow<Boolean> = _isCheckingReadiness
 
+    private var lastAnnouncedErrorSignature: String? = null
+
     init {
         checkReadiness()
     }
@@ -57,13 +60,27 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
             _isCheckingReadiness.value = false
 
             if (report.isReady) {
-                // Auto-start the copilot session once everything is verified
+                lastAnnouncedErrorSignature = null
                 controller.start()
+            } else {
+                controller.stop()
+                announceReadinessFailure(report)
             }
         }
     }
 
+    private fun announceReadinessFailure(report: StartupReadinessManager.ReadinessReport) {
+        val signature = report.errors.joinToString("|")
+        if (signature == lastAnnouncedErrorSignature) return
+        lastAnnouncedErrorSignature = signature
+
+        val hint = report.errors.firstOrNull()
+            ?: "Setup incomplete. Speech or cloud configuration missing."
+        ttsManager.speak(hint)
+    }
+
     fun startSession() {
+        if (!isSpeechReady()) return
         controller.start()
     }
 
@@ -72,11 +89,29 @@ class GeminiViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun onActiveKeyPressed() {
+        if (!isSpeechReady()) return
         controller.onActiveKeyPressed()
+    }
+
+    private fun isSpeechReady(): Boolean {
+        val report = _readinessReport.value
+        return report?.isReady == true && !_isCheckingReadiness.value
     }
 
     fun setCloseAppCallback(callback: () -> Unit) {
         closeAppCallback = callback
+    }
+
+    fun setAnswerMode(mode: trucker.geminiflash.controller.AnswerMode) {
+        controller.setAnswerMode(mode)
+    }
+
+    fun setNoiseProfile(profile: trucker.geminiflash.audio.NoiseProfile) {
+        controller.setNoiseProfile(profile)
+    }
+
+    fun getNoiseProfile(): trucker.geminiflash.audio.NoiseProfile {
+        return controller.getNoiseProfile()
     }
 
     

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import trucker.geminiflash.audio.SttManager
 import trucker.geminiflash.audio.TtsManager
+import trucker.geminiflash.audio.NoiseProfile
 import trucker.geminiflash.network.*
 import trucker.geminiflash.tools.TruckingTools
 import kotlinx.serialization.json.*
@@ -29,8 +30,30 @@ class CoPilotController(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private val vertexAiClient = VertexAiClient(appContext)
+    private val settingsManager = SettingsManager(appContext)
 
-    private val _uiState = MutableStateFlow(CopilotUiState())
+    // Answer mode state
+    private var _answerMode = MutableStateFlow(settingsManager.getAnswerMode())
+    val answerMode: StateFlow<AnswerMode> = _answerMode
+
+    fun setAnswerMode(mode: AnswerMode) {
+        _answerMode.value = mode
+        settingsManager.setAnswerMode(mode)
+        updateUi { it.copy(answerMode = mode) }
+        addLog("Answer mode: ${mode.label}")
+    }
+
+    fun setNoiseProfile(profile: NoiseProfile) {
+        sttManager.setNoiseProfile(profile)
+        settingsManager.setNoiseProfile(profile)
+        addLog("Noise profile: ${profile.label}")
+    }
+
+    fun getNoiseProfile(): NoiseProfile {
+        return sttManager.getNoiseProfile()
+    }
+
+    private val _uiState = MutableStateFlow(CopilotUiState(answerMode = settingsManager.getAnswerMode()))
     val uiState: StateFlow<CopilotUiState> = _uiState
 
     private val _logs = MutableStateFlow<List<String>>(emptyList())
@@ -42,6 +65,7 @@ class CoPilotController(
     // Conversation history for multi-turn context
     private val conversationHistory = mutableListOf<Content>()
     private var processingJob: Job? = null
+    private var queryingCueJob: Job? = null
     private var isActive = false
     private var shouldCloseAppAfterTts = false
     private var speakSessionId: String? = null
@@ -56,6 +80,15 @@ class CoPilotController(
             onError = { errorCode ->
                 addLog("STT Error: $errorCode")
                 _partialText.value = ""
+                if (errorCode == android.speech.SpeechRecognizer.ERROR_NETWORK ||
+                    errorCode == android.speech.SpeechRecognizer.ERROR_NETWORK_TIMEOUT
+                ) {
+                    addLog("Offline-only STT policy: network recognizer path blocked")
+                    updateUi {
+                        it.copy(lastError = "Offline STT required. Install on-device speech pack.")
+                    }
+                    return@setCallbacks
+                }
                 // Only retry if we're still supposed to be listening (not processing)
                 if (isActive && _uiState.value.aiState == AiState.LISTENING) {
                     // Small error recovery delay, then resume listening
@@ -105,6 +138,12 @@ class CoPilotController(
         shouldCloseAppAfterTts = false
         _logs.value = emptyList()
         _partialText.value = ""
+        
+        // Initialize noise profile from settings
+        val savedProfile = settingsManager.getNoiseProfile()
+        sttManager.setNoiseProfile(savedProfile)
+        addLog("Noise profile: ${savedProfile.label}")
+        
         updateUi {
             it.copy(
                 isConnected = true,
@@ -123,6 +162,7 @@ class CoPilotController(
     fun stop() {
         isActive = false
         processingJob?.cancel()
+        cancelQueryingCueLoop()
         sttManager.stopListening()
         ttsManager.stop()
         conversationHistory.clear()
@@ -152,18 +192,20 @@ class CoPilotController(
             AiState.CHECKING_DATA, AiState.SPEAKING -> {
                 // Cancel current operation and return to listening
                 processingJob?.cancel()
+                cancelQueryingCueLoop()
                 ttsManager.stop()
-                startListening()
+                startListening(force = true)
             }
         }
     }
 
-    private fun startListening() {
+    private fun startListening(force: Boolean = false) {
         if (!isActive) return
+        cancelQueryingCueLoop()
 
         // Only enter listening from listening/speaking states, not from checking data
         val currentState = _uiState.value.aiState
-        if (currentState == AiState.CHECKING_DATA) {
+        if (currentState == AiState.CHECKING_DATA && !force) {
             addLog("Skipping startListening: currently $currentState")
             return
         }
@@ -191,7 +233,8 @@ class CoPilotController(
 
                 val response = vertexAiClient.sendMessageStream(
                     textInput = text,
-                    history = currentHistory
+                    history = currentHistory,
+                    answerMode = _answerMode.value
                 ) { deltaText ->
                     synchronized(partialTextBuffer) {
                         partialTextBuffer.append(deltaText)
@@ -254,6 +297,9 @@ class CoPilotController(
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                cancelQueryingCueLoop()
+                throw e
             } catch (e: NetworkFailureException) {
                 addLog("Network failure: ${e.message}")
                 speakSessionId = "network_error_${System.currentTimeMillis()}"
@@ -268,7 +314,7 @@ class CoPilotController(
         }
     }
 
-    private fun handleResponse(response: GeminiResponse) {
+    private suspend fun handleResponse(response: GeminiResponse) {
         when (response) {
             is GeminiResponse.Text -> {
                 if (response.text.isNotBlank()) {
@@ -294,7 +340,7 @@ class CoPilotController(
         }
     }
 
-    private fun handleToolCalls(response: GeminiResponse.NeedsFunctionCall) {
+    private suspend fun handleToolCalls(response: GeminiResponse.NeedsFunctionCall) {
         if (response.calls.isEmpty()) {
             addLog("Error: Model requested action but provided no function calls")
             startListening()
@@ -309,89 +355,116 @@ class CoPilotController(
         // Check if this is a closeApp request
         if (call.name == "closeApp") {
             shouldCloseAppAfterTts = true
+        } else {
+            startQueryingCueLoop()
         }
 
-        scope.launch {
-            try {
-                // Execute tool calls in the controller
-                val functionResults = response.calls.map { call ->
-                    val args = call.args?.jsonObject?.mapValues { it.value }
-                    val result = TruckingTools.handleToolCall(call.name, args)
-                    FunctionResult(
-                        callId = call.id,
-                        name = call.name,
-                        result = result
-                    )
-                }
-
-                // Add function call to history
-                val parts = response.calls.map { call ->
-                    val argsMap = call.args?.jsonObject?.mapValues { entry ->
-                        val value = entry.value
-                        if (value is JsonPrimitive) {
-                            if (value.isString) value.content
-                            else value.toString()
-                        } else value.toString()
-                    } ?: emptyMap<String, Any>()
-
-                    Part.builder().functionCall(
-                        FunctionCall.builder()
-                            .id(call.id)
-                            .name(call.name)
-                            .args(argsMap)
-                            .build()
-                    ).build()
-                }
-                conversationHistory.add(Content.fromParts(*parts.toTypedArray()))
-
-                val currentHistory = conversationHistory.toList()
-                val finalResponse = vertexAiClient.sendFunctionResults(
-                    functionResults = functionResults,
-                    history = currentHistory
+        try {
+            // Execute tool calls in the controller
+            val functionResults = response.calls.map { call ->
+                val args = call.args?.jsonObject?.mapValues { it.value }
+                val result = TruckingTools.handleToolCall(call.name, args)
+                FunctionResult(
+                    callId = call.id,
+                    name = call.name,
+                    result = result
                 )
+            }
 
-                when (finalResponse) {
-                    is GeminiResponse.Text -> {
-                        if (finalResponse.text.isNotBlank()) {
-                            addLog("Vertex AI: ${finalResponse.text.take(100)}...")
-                            updateUi { it.copy(geminiText = finalResponse.text, currentTool = "") }
-                            // Add assistant response to history
-                            conversationHistory.add(Content.fromParts(Part.fromText(finalResponse.text)))
-                            speakSessionId = "session_${System.currentTimeMillis()}"
-                            transitionTo(AiState.SPEAKING)
-                            ttsManager.speak(finalResponse.text, speakSessionId)
-                        } else {
-                            updateUi { it.copy(currentTool = "") }
-                            startListening()
-                        }
-                    }
-                    is GeminiResponse.Error -> {
-                        addLog("Error: ${finalResponse.message}")
-                        updateUi { it.copy(lastError = finalResponse.message, currentTool = "") }
-                        speakSessionId = "error_${System.currentTimeMillis()}"
+            // Add function call to history
+            val parts = response.calls.map { call ->
+                val argsMap = call.args?.jsonObject?.mapValues { entry ->
+                    val value = entry.value
+                    if (value is JsonPrimitive) {
+                        if (value.isString) value.content
+                        else value.toString()
+                    } else value.toString()
+                } ?: emptyMap<String, Any>()
+
+                Part.builder().functionCall(
+                    FunctionCall.builder()
+                        .id(call.id)
+                        .name(call.name)
+                        .args(argsMap)
+                        .build()
+                ).build()
+            }
+            conversationHistory.add(Content.fromParts(*parts.toTypedArray()))
+
+            val currentHistory = conversationHistory.toList()
+            val finalResponse = vertexAiClient.sendFunctionResults(
+                functionResults = functionResults,
+                history = currentHistory,
+                answerMode = _answerMode.value
+            )
+
+            cancelQueryingCueLoop()
+
+            when (finalResponse) {
+                is GeminiResponse.Text -> {
+                    if (finalResponse.text.isNotBlank()) {
+                        addLog("Vertex AI: ${finalResponse.text.take(100)}...")
+                        updateUi { it.copy(geminiText = finalResponse.text, currentTool = "") }
+                        // Add assistant response to history
+                        conversationHistory.add(Content.fromParts(Part.fromText(finalResponse.text)))
+                        speakSessionId = "session_${System.currentTimeMillis()}"
                         transitionTo(AiState.SPEAKING)
-                        ttsManager.speak("Sorry, I encountered an error. Please try again.", speakSessionId)
-                    }
-                    else -> {
-                        addLog("Unexpected response type")
+                        ttsManager.speak(finalResponse.text, speakSessionId)
+                    } else {
                         updateUi { it.copy(currentTool = "") }
-                        transitionTo(AiState.SPEAKING)
-                        speakSessionId = "unexpected_${System.currentTimeMillis()}"
-                        ttsManager.speak("Sorry, I didn't understand that response. Please try again.", speakSessionId)
+                        startListening()
                     }
                 }
-            } catch (e: NetworkFailureException) {
-                addLog("Network failure during tool call: ${e.message}")
-                speakSessionId = "network_error_${System.currentTimeMillis()}"
-                transitionTo(AiState.SPEAKING)
-                ttsManager.speak("I've lost connection to dispatch. Try again when we have a signal.", speakSessionId)
-            } catch (e: Exception) {
-                addLog("Exception during tool call: ${e.message}")
-                speakSessionId = "exception_${System.currentTimeMillis()}"
-                transitionTo(AiState.SPEAKING)
-                ttsManager.speak("Sorry, I encountered an error. Please try again.", speakSessionId)
+                is GeminiResponse.Error -> {
+                    addLog("Error: ${finalResponse.message}")
+                    updateUi { it.copy(lastError = finalResponse.message, currentTool = "") }
+                    speakSessionId = "error_${System.currentTimeMillis()}"
+                    transitionTo(AiState.SPEAKING)
+                    ttsManager.speak("Sorry, I encountered an error. Please try again.", speakSessionId)
+                }
+                else -> {
+                    addLog("Unexpected response type")
+                    updateUi { it.copy(currentTool = "") }
+                    transitionTo(AiState.SPEAKING)
+                    speakSessionId = "unexpected_${System.currentTimeMillis()}"
+                    ttsManager.speak("Sorry, I didn't understand that response. Please try again.", speakSessionId)
+                }
+            }
+        } catch (e: NetworkFailureException) {
+            cancelQueryingCueLoop()
+            addLog("Network failure during tool call: ${e.message}")
+            speakSessionId = "network_error_${System.currentTimeMillis()}"
+            transitionTo(AiState.SPEAKING)
+            ttsManager.speak("I've lost connection to dispatch. Try again when we have a signal.", speakSessionId)
+        } catch (e: CancellationException) {
+            cancelQueryingCueLoop()
+            throw e
+        } catch (e: Exception) {
+            cancelQueryingCueLoop()
+            addLog("Exception during tool call: ${e.message}")
+            speakSessionId = "exception_${System.currentTimeMillis()}"
+            transitionTo(AiState.SPEAKING)
+            ttsManager.speak("Sorry, I encountered an error. Please try again.", speakSessionId)
+        }
+    }
+
+    private fun startQueryingCueLoop() {
+        cancelQueryingCueLoop()
+        queryingCueJob = scope.launch {
+            ttsManager.speakStatusCue("Querying")
+            while (isActive && _uiState.value.aiState == AiState.CHECKING_DATA) {
+                delay(QUERYING_CUE_REPEAT_MS)
+                if (isActive && _uiState.value.aiState == AiState.CHECKING_DATA) {
+                    ttsManager.speakStatusCue("Still querying")
+                }
             }
         }
+    }
+
+    private fun cancelQueryingCueLoop() {
+        queryingCueJob?.cancel()
+        queryingCueJob = null
+        ttsManager.clearStatusCues()
     }
 
     private fun transitionTo(newState: AiState) {
@@ -417,6 +490,7 @@ class CoPilotController(
 
     companion object {
         private val sentenceEndChars = charArrayOf('.', '?', '!', '\n')
+        private const val QUERYING_CUE_REPEAT_MS = 8_000L
     }
 }
 
@@ -427,8 +501,14 @@ data class CopilotUiState(
     val userText: String = "",
     val geminiText: String = "",
     val currentTool: String = "",
-    val lastError: String = ""
+    val lastError: String = "",
+    val answerMode: AnswerMode = AnswerMode.LONG
 )
+
+enum class AnswerMode(val label: String) {
+    SHORT("Short"),
+    LONG("Long")
+}
 
 enum class AiState(val label: String) {
     LISTENING("Listening..."),

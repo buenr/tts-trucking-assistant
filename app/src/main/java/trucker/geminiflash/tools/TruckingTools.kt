@@ -11,7 +11,15 @@ object TruckingTools {
     val declaration = listOf(
             FunctionDeclaration(
                 name = "getDriverDashboard",
-                description = "Returns comprehensive driver dashboard including profile info, HOS status, safety score, MPG/equipment performance metrics, and medical card renewal reminders.",
+                description = "Returns driver profile info, current location/corridor, safety score with recent events, MPG performance with peer comparison, and personal goals (home-time countdown, miles this month, referral bonus). Does NOT include HOS details or medical card status - use getComplianceStatus for those.",
+                parameters = Schema(
+                    type = "OBJECT",
+                    properties = emptyMap()
+                )
+            ),
+            FunctionDeclaration(
+                name = "getTruckInfo",
+                description = "Returns truck and trailer equipment details including tractor/trailer numbers, trailer type, ELD provider, and equipment health metrics (DEF level, fuel percentage, tire tread, active fault codes, service milestones).",
                 parameters = Schema(
                     type = "OBJECT",
                     properties = emptyMap()
@@ -19,7 +27,7 @@ object TruckingTools {
             ),
             FunctionDeclaration(
                 name = "getLoadInformation",
-                description = "Returns load details based on type. Use 'current' for active load with stops and ETAs, or 'next' for pre-dispatch information.",
+                description = "Returns load details based on type. Use 'current' for active load with stops, ETAs, and facility insights (parking/amenities), or 'next' for pre-dispatch information.",
                 parameters = Schema(
                     type = "OBJECT",
                     properties = mapOf(
@@ -41,7 +49,7 @@ object TruckingTools {
             ),
             FunctionDeclaration(
                 name = "getRouteConditions",
-                description = "Returns route planning information including traffic/weather conditions for the next hour and recommended fuel stops with amenities.",
+                description = "Returns real-time weather and traffic conditions for the immediate route (next 1 hour) and recommended fuel stops with amenities. For load-specific route risks tied to a specific delivery, use getLoadInformation.",
                 parameters = Schema(
                     type = "OBJECT",
                     properties = emptyMap()
@@ -49,7 +57,7 @@ object TruckingTools {
             ),
             FunctionDeclaration(
                 name = "getCommunications",
-                description = "Returns communication information. Use 'messages' for dispatch inbox or 'contacts' for support department phone numbers.",
+                description = "Returns communication information (read-only). Use 'messages' for dispatch inbox or 'contacts' for support department phone numbers. To send a message to the Driver Leader, use messageDriverLeader instead.",
                 parameters = Schema(
                     type = "OBJECT",
                     properties = mapOf(
@@ -61,7 +69,7 @@ object TruckingTools {
             ),
             FunctionDeclaration(
                 name = "getCompanyResources",
-                description = "Returns company information based on category. Use 'policies' for FAQs, 'mentor' for mentor program, 'ownerOperator' for lease program, or 'training' for modules.",
+                description = "Returns company information based on category. Use 'policies' for FAQs and terminal amenities/parking status, 'mentor' for mentor program, 'ownerOperator' for lease program, or 'training' for modules.",
                 parameters = Schema(
                     type = "OBJECT",
                     properties = mapOf(
@@ -72,10 +80,32 @@ object TruckingTools {
             ),
             FunctionDeclaration(
                 name = "getComplianceStatus",
-                description = "Returns compliance-focused information including HOS alerts, medical card status, DVIR requirements, and inspection scheduling.",
+                description = "Returns HOS status (drive/duty/cycle remaining, 7-day recap, break clocks, alerts), medical card status, DVIR submission status, and annual inspection scheduling. This is the authoritative source for all regulatory compliance data.",
                 parameters = Schema(
                     type = "OBJECT",
                     properties = emptyMap()
+                )
+            ),
+            FunctionDeclaration(
+                name = "messageDriverLeader",
+                description = "Sends a message to the driver's Driver Leader on the driver's behalf (in-cab macro / driver portal). Use when the driver asks to tell, message, notify, or send a note to their driver leader. Write the message in first person from the driver's words; do not add facts they did not state.",
+                parameters = Schema(
+                    type = "OBJECT",
+                    properties = mapOf(
+                        "message" to Schema(
+                            type = "STRING",
+                            description = "Message body to send, in first person as dictated by the driver"
+                        ),
+                        "subject" to Schema(
+                            type = "STRING",
+                            description = "Optional short subject; omit to auto-generate from the message"
+                        ),
+                        "priority" to Schema(
+                            type = "STRING",
+                            description = "Optional priority: 'normal' (default) or 'urgent'"
+                        )
+                    ),
+                    required = listOf("message")
                 )
             ),
             FunctionDeclaration(
@@ -143,23 +173,16 @@ object TruckingTools {
                         put("tenure_years", 6)
                     })
                     put("location", buildJsonObject {
-                        put("as_of", "2026-04-15T14:20")
+                        put("as_of", "2026-05-15T14:20")
                         put("nearest_city", "Flagstaff, AZ")
                         put("corridor", "I-40 EB")
                     })
-                    put("equipment", buildJsonObject {
-                        put("tractor", "684821")
-                        put("trailer", "903144")
-                        put("trailer_type", "53ft Dry Van")
-                        put("reefer_enabled", false)
-                        put("eld_provider", "Samsara")
-                    })
-                    put("hos_status", buildJsonObject {
-                        put("drive_hours_remaining", "5h 15m")
-                        put("duty_time_remaining", "8h 45m")
-                        put("cycle_hours_remaining", "18h 45m")
-                        put("next_break_due_in", "2h 30m")
-                        put("next_30m_break_due_by", "2026-04-15T17:05")
+                    put("personal_goals", buildJsonObject {
+                        put("next_scheduled_hometime", "2026-05-22")
+                        put("hometime_countdown_days", 7)
+                        put("miles_this_month", 9420)
+                        put("bonus_milestone_progress", "85%")
+                        put("referral_bonus_pending", "$500 (1 driver in orientation)")
                     })
                     put("safety_score", buildJsonObject {
                         put("current_score", 945)
@@ -168,7 +191,7 @@ object TruckingTools {
                         put("recent_events", buildJsonArray {
                             add(buildJsonObject {
                                 put("event_type", "Hard Braking")
-                                put("date", "2026-04-14")
+                                put("date", "2026-05-14")
                                 put("location", "I-40 near Kingman, AZ")
                                 put("severity", "Moderate")
                                 put("impact_on_score", "-3 pts")
@@ -188,19 +211,28 @@ object TruckingTools {
                             put("fuel_savings_vs_fleet", "$42.50 per week")
                         })
                     })
-                    put("medical_card_renewal", buildJsonObject {
-                        put("expires_on", "2026-12-14")
-                        put("days_until_expiry", 243)
-                        put("reminder_scheduled", true)
-                        put("next_reminder_date", "2026-09-15")
-                        put("renewal_window_opens", "2026-10-14")
-                        put("preferred_clinics", buildJsonArray {
-                            add("Concentra - Phoenix")
-                            add("Urgent Care Plus - Flagstaff")
-                            add("Swift Medical Partner - Tucson")
+                }
+            }
+            
+            "getTruckInfo" -> {
+                buildJsonObject {
+                    put("driver_id", DEMO_DRIVER_ID)
+                    put("equipment", buildJsonObject {
+                        put("tractor", "684821")
+                        put("trailer", "903144")
+                        put("trailer_type", "53ft Dry Van")
+                        put("reefer_enabled", false)
+                        put("eld_provider", "Samsara")
+                    })
+                    put("equipment_health", buildJsonObject {
+                        put("def_level_percentage", 82)
+                        put("fuel_level_percentage", 65)
+                        put("next_service_milestone", "Oil change due in 2,450 miles")
+                        put("tire_tread_status", "8/32 - Good")
+                        put("active_fault_codes", buildJsonArray {
+                            add("Sensor-ABS-Trailer (Non-critical)")
                         })
                     })
-                    put("dvir_status", "submitted_today")
                 }
             }
             
@@ -221,15 +253,22 @@ object TruckingTools {
                         })
                         put("origin", "Reno, NV")
                         put("destination", "Dallas, TX")
-                        put("next_stop_eta", "2026-04-15T19:40")
+                        put("next_stop_eta", "2026-05-15T19:40")
+                        put("facility_insights", buildJsonObject {
+                            put("overnight_parking_allowed", true)
+                            put("bathroom_access", "Driver Lounge / 24-7")
+                            put("average_detention_time", "2.5 hours")
+                            put("entry_instructions", "Enter through North Gate on Miller Rd. Have CDL ready for security.")
+                            put("on_site_scale", true)
+                        })
                         put("stops", buildJsonArray {
                             add(buildJsonObject {
                                 put("stop_index", 1)
                                 put("type", "pickup")
                                 put("facility", "Silver State Distribution")
                                 put("city", "Reno, NV")
-                                put("appointment", "2026-04-14T09:00")
-                                put("arrival_time", "2026-04-14T08:45")
+                                put("appointment", "2026-05-14T09:00")
+                                put("arrival_time", "2026-05-14T08:45")
                                 put("status", "completed")
                             })
                             add(buildJsonObject {
@@ -237,8 +276,8 @@ object TruckingTools {
                                 put("type", "fuel")
                                 put("facility", "Swift Fuel Network #AZ-17")
                                 put("city", "Flagstaff, AZ")
-                                put("appointment", "2026-04-15T19:30")
-                                put("arrival", "2026-04-15T19:40")
+                                put("appointment", "2026-05-15T19:30")
+                                put("arrival", "2026-05-15T19:40")
                                 put("status", "in_progress")
                                 put("risk", "minor_delay_10m")
                             })
@@ -247,7 +286,7 @@ object TruckingTools {
                                 put("type", "delivery")
                                 put("facility", "DFW Retail Crossdock")
                                 put("city", "Dallas, TX")
-                                put("appointment", "2026-04-16T13:00")
+                                put("appointment", "2026-05-16T13:00")
                                 put("status", "pending")
                                 put("risk", "tight_eta_due_to_i40_winds")
                             })
@@ -276,8 +315,8 @@ object TruckingTools {
                         })
                         put("origin", "Dallas, TX")
                         put("destination", "Atlanta, GA")
-                        put("pickup_window", "2026-04-16T15:00 to 2026-04-16T19:00")
-                        put("delivery_window", "2026-04-18T08:00 to 2026-04-18T12:00")
+                        put("pickup_window", "2026-05-16T15:00 to 2026-05-16T19:00")
+                        put("delivery_window", "2026-05-18T08:00 to 2026-05-18T12:00")
                         put("total_miles", 780)
                         put("equipment_required", "53ft Dry Van")
                         put("notes", "High value load, no unauthorized stops. Preload available at Dallas yard.")
@@ -290,8 +329,8 @@ object TruckingTools {
                 when (period) {
                     "current" -> buildJsonObject {
                         put("driver_id", DEMO_DRIVER_ID)
-                        put("pay_period", "2026-03-28 to 2026-04-10")
-                        put("pay_date", "2026-04-11")
+                        put("pay_period", "2026-04-28 to 2026-05-10")
+                        put("pay_date", "2026-05-11")
                         put("base_pay", buildJsonObject {
                             put("miles_paid", 2850)
                             put("cpm_rate", 0.52)
@@ -302,13 +341,13 @@ object TruckingTools {
                                 put("type", "Layover")
                                 put("amount", 150.00)
                                 put("reason", "Weather delay in Flagstaff")
-                                put("date", "2026-04-05")
+                                put("date", "2026-05-05")
                             })
                             add(buildJsonObject {
                                 put("type", "Detention")
                                 put("amount", 75.00)
                                 put("reason", "Shipper delay - Reno")
-                                put("date", "2026-04-02")
+                                put("date", "2026-05-02")
                             })
                         })
                         put("deductions", buildJsonArray {
@@ -333,19 +372,19 @@ object TruckingTools {
                         put("current_quarter", "Q2 2026")
                         put("monthly_safety_class", buildJsonObject {
                             put("required", true)
-                            put("month", "April 2026")
+                            put("month", "May 2026")
                             put("title", "Defensive Driving Techniques")
-                            put("deadline", "2026-04-30")
+                            put("deadline", "2026-05-30")
                             put("status", "completed")
-                            put("completion_date", "2026-04-15")
+                            put("completion_date", "2026-05-15")
                             put("bonus_amount", 150.00)
                         })
                         put("quarterly_bonus_status", buildJsonObject {
                             put("eligible", true)
-                            put("current_score", 945)
                             put("required_score", 900)
                             put("projected_bonus", 450.00)
                             put("payment_date", "2026-07-15")
+                            put("note", "Check getDriverDashboard for current safety score")
                         })
                         put("total_projected_earnings", 600.00)
                     }
@@ -359,7 +398,7 @@ object TruckingTools {
                 buildJsonObject {
                     put("driver_id", DEMO_DRIVER_ID)
                     put("time_horizon", "1 hour")
-                    put("generated_at", "2026-04-15T14:20")
+                    put("generated_at", "2026-05-15T14:20")
                     put("conditions", buildJsonArray {
                         add(buildJsonObject {
                             put("type", "weather")
@@ -403,7 +442,7 @@ object TruckingTools {
                             put("priority", "high")
                             put("subject", "Delivery gate code updated")
                             put("body", "DFW Retail Crossdock gate code is now 4729#. Confirm receipt.")
-                            put("created_at", "2026-04-15T13:55")
+                            put("created_at", "2026-05-15T13:55")
                         })
                         add(buildJsonObject {
                             put("message_id", "DSP-77088")
@@ -411,7 +450,7 @@ object TruckingTools {
                             put("priority", "normal")
                             put("subject", "Fuel stop preference")
                             put("body", "Use Swift Fuel Network #AZ-17 when practical.")
-                            put("created_at", "2026-04-15T09:10")
+                            put("created_at", "2026-05-15T09:10")
                         })
                     }
                     val filteredMessages = if (unreadOnly) {
@@ -461,7 +500,7 @@ object TruckingTools {
                 when (category) {
                     "policies" -> buildJsonObject {
                         put("company", "Swift Transportation")
-                        put("last_updated", "2026-04-10")
+                        put("last_updated", "2026-05-10")
                         put("categories", buildJsonArray {
                             add(buildJsonObject {
                                 put("category", "Pet Policy")
@@ -476,7 +515,19 @@ object TruckingTools {
                                 put("policy_summary", "Protocol for mechanical issues on the road.")
                             })
                         })
+                        put("terminal_info", buildJsonObject {
+                            put("current_terminal", "Phoenix Main")
+                            put("parking_capacity", "Limited (75% full)")
+                            put("amenities", buildJsonArray {
+                                add("Showers (6)")
+                                add("Laundry (Free)")
+                                add("Driver Lounge (WiFi/TV)")
+                                add("Cafeteria (0600-2200)")
+                            })
+                            put("shop_status", "Open 24/7")
+                        })
                     }
+
                     "mentor" -> buildJsonObject {
                         put("program_name", "Swift Driver Mentor Program")
                         put("overview", "Pass along your knowledge to the next generation of drivers while enhancing your own earning potential.")
@@ -508,7 +559,7 @@ object TruckingTools {
                                 put("type", "video")
                                 put("duration_minutes", 25)
                                 put("status", "completed")
-                                put("completion_date", "2026-04-15")
+                                put("completion_date", "2026-05-15")
                                 put("link", "https://swiftuniversity.com/modules/safe-001")
                             })
                             add(buildJsonObject {
@@ -536,29 +587,80 @@ object TruckingTools {
                         put("duty_time_remaining", "8h 45m")
                         put("cycle_hours_remaining", "18h 45m")
                         put("next_break_due_in", "2h 30m")
+                        put("next_30m_break_due_by", "2026-05-15T17:05")
+                        put("hos_recap", buildJsonObject {
+                            put("hours_returning_at_midnight", "8.5")
+                            put("eight_day_total", "61.5")
+                            put("next_7_day_projection", buildJsonArray {
+                                add(buildJsonObject { put("date", "2026-05-16"); put("hours_back", "8.5") })
+                                add(buildJsonObject { put("date", "2026-05-17"); put("hours_back", "11.0") })
+                                add(buildJsonObject { put("date", "2026-05-18"); put("hours_back", "0.0") })
+                                add(buildJsonObject { put("date", "2026-05-19"); put("hours_back", "9.5") })
+                                add(buildJsonObject { put("date", "2026-05-20"); put("hours_back", "10.0") })
+                                add(buildJsonObject { put("date", "2026-05-21"); put("hours_back", "8.0") })
+                                add(buildJsonObject { put("date", "2026-05-22"); put("hours_back", "7.5") })
+                            })
+                        })
                         put("alerts", buildJsonArray {
                             add(buildJsonObject {
                                 put("category", "HOS")
                                 put("severity", "warning")
                                 put("message", "11-hour drive limit projected in 5h 15m.")
-                                put("due_by", "2026-04-15T20:05")
+                                put("due_by", "2026-05-15T20:05")
                             })
                         })
                     })
                     put("medical_card_status", buildJsonObject {
                         put("expires_on", "2026-12-14")
-                        put("days_until_expiry", 243)
+                        put("days_until_expiry", 213)
                         put("reminder_scheduled", true)
                         put("next_reminder_date", "2026-09-15")
                         put("renewal_window_opens", "2026-10-14")
                         put("dot_physical_required", true)
+                        put("preferred_clinics", buildJsonArray {
+                            add("Concentra - Phoenix")
+                            add("Urgent Care Plus - Flagstaff")
+                            add("Swift Medical Partner - Tucson")
+                        })
                     })
                     put("dvir_status", "submitted_today")
                     put("annual_inspection", buildJsonObject {
                         put("last_inspection_date", "2025-12-15")
                         put("next_inspection_due", "2026-12-15")
-                        put("days_until_due", 244)
+                        put("days_until_due", 214)
                     })
+                }
+            }
+
+            "messageDriverLeader" -> {
+                val message = args?.get("message")?.jsonPrimitive?.contentOrNull?.trim()
+                    ?: throw IllegalArgumentException("message is required for messageDriverLeader")
+                if (message.isEmpty()) {
+                    throw IllegalArgumentException("message cannot be empty for messageDriverLeader")
+                }
+                val priority = args?.get("priority")?.jsonPrimitive?.contentOrNull?.lowercase() ?: "normal"
+                val subject = args?.get("subject")?.jsonPrimitive?.contentOrNull?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: message.take(48).let { if (message.length > 48) "$it..." else it }
+
+                buildJsonObject {
+                    put("status", "sent")
+                    put("message_id", "DL-${System.currentTimeMillis() % 100000}")
+                    put("driver_id", DEMO_DRIVER_ID)
+                    put("recipient", buildJsonObject {
+                        put("name", "Sarah Jenkins")
+                        put("role", "Driver Leader")
+                        put("contact_method", "In-cab Macro or Driver Portal")
+                    })
+                    put("channel", "In-cab Macro")
+                    put("priority", if (priority == "urgent") "urgent" else "normal")
+                    put("subject", subject)
+                    put("message", message)
+                    put("sent_at", "2026-05-15T14:25")
+                    put(
+                        "confirmation",
+                        "Message sent to Sarah Jenkins, your Driver Leader."
+                    )
                 }
             }
 
