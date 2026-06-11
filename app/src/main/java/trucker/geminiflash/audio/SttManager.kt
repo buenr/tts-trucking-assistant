@@ -24,26 +24,26 @@ enum class NoiseProfile(
 ) {
     QUIET(
         label = "Quiet",
-        silenceTimeoutMs = 800L,
-        possiblyCompleteTimeoutMs = 800L,
+        silenceTimeoutMs = 1400L,
+        possiblyCompleteTimeoutMs = 1400L,
         description = "Office/home environment"
     ),
     NORMAL(
         label = "Normal",
-        silenceTimeoutMs = 1000L,
-        possiblyCompleteTimeoutMs = 1000L,
+        silenceTimeoutMs = 1800L,
+        possiblyCompleteTimeoutMs = 1800L,
         description = "Regular city/suburban driving"
     ),
     LOUD_TRUCK(
         label = "Loud Truck",
-        silenceTimeoutMs = 1500L,
-        possiblyCompleteTimeoutMs = 1500L,
+        silenceTimeoutMs = 2500L,
+        possiblyCompleteTimeoutMs = 2500L,
         description = "Highway/high noise truck environment"
     ),
     CUSTOM(
         label = "Custom",
-        silenceTimeoutMs = 1200L,
-        possiblyCompleteTimeoutMs = 1200L,
+        silenceTimeoutMs = 2000L,
+        possiblyCompleteTimeoutMs = 2000L,
         description = "User-defined settings"
     );
 
