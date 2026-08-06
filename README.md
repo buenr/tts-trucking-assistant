@@ -1,102 +1,154 @@
-Here is a comprehensive architecture document for the AI Trucking Co-Pilot application, tailored specifically for the Samsung Galaxy Tab Active 5 and optimized for low-bandwidth 4G LTE environments. 
- 
---- 
- 
-# System Architecture Document: AI Trucking Co-Pilot 
- 
-## 1. Executive Summary 
-This document outlines the architecture for an in-cab, voice-activated AI co-pilot application designed for truck drivers. Deployed on the **Samsung Galaxy Tab Active 5**, the application acts as a hands-free intelligent assistant.  
- 
-To ensure ultra-low latency and absolute resilience against poor 4G LTE network coverage on highways, the application offloads all audio processing (Voice Activity Detection, Speech-to-Text, and Text-to-Speech) to the device’s native, offline Android stack. The only network payload transmitted is plain text to and from a proprietary Large Language Model (LLM), reducing bandwidth requirements by over 99% compared to traditional cloud-based voice assistants. 
- 
-## 2. Hardware & OS Context (Galaxy Tab Active 5) 
-*   **OS:** Android 14 (One UI 6) – Fully supports modern on-device ML APIs. 
-*   **Processor:** Exynos 1380 – Sufficient Neural Processing Unit (NPU) capability to run offline STT/TTS without draining the battery or causing thermal throttling. 
-*   **Audio:** Equipped with native hardware noise suppression (crucial for in-cab diesel engine and road noise). 
-*   **Fleet Management (MDM):** Tablets are managed via Knox Manage  to pre-download Google/Samsung offline language models prior to deployment. 
- 
-## 3. High-Level Architecture 
-The system follows a reactive **Clean Architecture (MVVM)**, utilizing Kotlin Coroutines and Flows to manage asynchronous data streams.  
- 
-### Architecture Diagram (Logical Flow) 
-```text 
+# AI Trucking Co-Pilot (TruckerAssistTTS)
+
+Welcome to the **AI Trucking Co-Pilot** repository, an in-cab, voice-activated AI assistant designed specifically for truck drivers. Optimized for the **Samsung Galaxy Tab Active 5** and engineered for low-bandwidth, highly degraded 4G LTE environments, this application provides drivers with a hands-free, safety-focused intelligent companion.
+
+To ensure ultra-low latency and total resilience against spotty or non-existent cellular coverage on highways, the application offloads heavy audio and voice processing (Voice Activity Detection, Speech-to-Text, and Text-to-Speech) to the device’s native, offline Android APIs. The only network payload transmitted is plain text exchanged with Google Cloud Vertex AI (utilizing Gemini 2.5 Flash), reducing bandwidth requirements by over 99% compared to traditional cloud-based voice assistants.
+
+---
+
+## Table of Contents
+1. [Core Features](#1-core-features)
+2. [Hardware & OS Context](#2-hardware--os-context)
+3. [Architecture Overview](#3-architecture-overview)
+4. [Component Walkthrough](#4-component-walkthrough)
+   - [4.1 Voice Activity Detection (VAD)](#41-voice-activity-detection-vad)
+   - [4.2 Offline Speech-to-Text (STT)](#42-offline-speech-to-text-stt)
+   - [4.3 Vertex AI Network Gateway](#43-vertex-ai-network-gateway)
+   - [4.4 Offline Text-to-Speech (TTS)](#44-offline-text-to-speech-tts)
+5. [Getting Started & Configuration](#5-getting-started--configuration)
+   - [5.1 Prerequisites](#51-prerequisites)
+   - [5.2 Project Setup](#52-project-setup)
+   - [5.3 API Credentials Setup](#53-api-credentials-setup)
+6. [Testing & Verification](#6-testing--verification)
+7. [Production Deployment & MDM Migration](#7-production-deployment--mdm-migration)
+8. [UI/UX & Safety Considerations](#8-uiux--safety-considerations)
+
+---
+
+## 1. Core Features
+
+- **Hands-Free / Eyes-Free Co-Pilot:** Operates entirely through voice commands and spoken responses, keeping drivers' hands on the wheel and eyes on the road.
+- **Asymmetric Low-Bandwidth Optimization:** Transmits small JSON text payloads (~500 bytes) instead of streaming raw audio over LTE.
+- **Answer Mode Toggle:**
+  - **SHORT Mode (Default):** Restricts responses to 1-2 sentences maximum, answering only the specific question asked.
+  - **LONG Mode:** Provides detailed, contextual responses with additional helpful details (3-5 sentences when appropriate).
+- **Intelligent Tool/Function Calling:** Integrates with local trucking APIs to provide real-time updates regarding Driver Dashboards, Truck Equipment Health, Load Information, Route Conditions, Financials/Bonuses, Communications (Dispatch Messages), and Compliance (Hours of Service).
+- **Automated Audio Ducking:** Automatically lowers music, radio, or navigation volume during Co-Pilot listening or speaking states.
+
+---
+
+## 2. Hardware & OS Context
+
+- **Target Device:** Samsung Galaxy Tab Active 5.
+- **OS:** Android 14 (One UI 6) or higher.
+- **Processor:** Exynos 1380 with on-device Neural Processing Unit (NPU) capabilities.
+- **Audio Profile:** Native hardware-assisted noise suppression tuned for deep diesel engine hum and highway cabin noise (70–85 dB).
+- **Device Management:** MDM-managed (Knox Manage, Intune, Workspace ONE) to enforce the pre-download of high-fidelity Google/Samsung offline language packs.
+
+---
+
+## 3. Architecture Overview
+
+This application follows a highly reactive **Clean Architecture (MVVM)**, utilizing Kotlin Coroutines and Flows to manage asynchronous streams.
+
+```text
 [ Microphone ]  
-     ↓ (Raw Audio)[ Native VAD & Noise Suppression ] -- (Silence Truncated) --> [ Offline STT Engine ] 
+     ↓ (Raw Audio)
+[ Native VAD & Noise Suppression ] -- (Silence Truncated) --> [ Offline STT Engine ]
                                                                      ↓ (Text String) 
                                                          [ Co-Pilot Logic Controller ] 
                                                                      ↓ (Text Payload: ~500 bytes) 
 [ Text-to-Speech Engine ]  <-- (Text Stream) -------------[ LLM Network Gateway ]  
      ↓ (Audio Stream)                                                ↓↑ (WebSocket/SSE) 
 [ Speaker / Headset ]                                       [ Vertex Gemini 2.5 Flash] 
-``` 
- 
-## 4. Core Component Architecture 
- 
-### 4.1. Voice Activity Detection (VAD) & Audio Pre-processing 
-*   **Native Stack Implementation:** Android’s `AudioRecord` API combined with `AcousticEchoCanceler` and `NoiseSuppressor` hardware effects.  
-*   **VAD Logic:** Instead of continuously streaming to an STT engine (which burns CPU), we utilize Android's `SpeechRecognizer` in a continuous listening loop, relying on its internal VAD to detect the start of speech. Push of the Active Key will trigger the App to start.   **In-Cab Adaptation:** Truck cabs can hit 70–85 dB of ambient noise. Native hardware noise suppression ensures the STT engine only receives clean vocal frequencies. 
- 
-### 4.2. Speech-to-Text (STT) - Offline Mode 
-*   **Native Stack Implementation:** `android.speech.SpeechRecognizer`. 
-*   **Offline Enforcement:**  
-   *   Prior to initialization, the app calls `SpeechRecognizer.isOnDeviceRecognitionAvailable(context)`. 
-   *   STT uses `SpeechRecognizer.createOnDeviceSpeechRecognizer(...)` and fails closed when on-device recognition is unavailable.
-   *   The intent `RecognizerIntent.ACTION_RECOGNIZE_SPEECH` is fired with `RecognizerIntent.EXTRA_PREFER_OFFLINE` set to `true`. 
-   *   Network-related recognizer errors are treated as policy violations and are not auto-retried into possible cloud fallback paths.
-   *   Result: no STT session starts unless on-device recognition is available. 
-*   **Partial Results:** For testing, utilize `onPartialResults()` to display real-time text on the tablet screen, letting the tester know the system is hearing them correctly before the final payload is sent to the LLM. 
- 
-### 4.3. LLM Network Gateway (The "Middle") 
-*   **Bandwidth Optimization:** Because STT is offline, a typical voice command translates to roughly 50-200 bytes of text. Even on a highly degraded Edge/1G/LTE connection, transmitting this takes milliseconds. 
-*   **Protocol:** **WebSocket** or **Server-Sent Events (SSE)**. 
-   *   *Why?* To maintain an open connection and allow the LLM to stream tokens back as they are generated. This prevents "timeout" scenarios on slow networks. 
-*   **Connection Resilience:**  
-   *   Implemented via OkHttp/Retrofit. 
-   *   Includes a robust exponential backoff and retry mechanism. 
-   *   If the network drops entirely, the app intercepts the LLM request and falls back to a local rule-based system (e.g., triggering a native offline TTS response: *"I've lost connection to dispatch. Try again when we have a signal."*). 
- 
-### 4.4. Text-to-Speech (TTS) - Offline Mode 
-*   **Native Stack Implementation:** `android.speech.tts.TextToSpeech`. 
-*   **Offline Enforcement:**  
-   *   Engine is validated against offline English voices during initialization.
-   *   Required voice packs (e.g., en-US high-quality) are verified upon app startup.  
-   *   TTS fails closed when no offline voice is available (no fallback to default or network-required voices).
-*   **Streaming TTS:** As the LLM streams tokens (words) back via SSE/WebSocket, the Co-Pilot Logic Controller chunks the text at sentence boundaries (using punctuation like `.`, `?`, `!`). These chunks are fed into the TTS queue sequentially. This means the tablet begins speaking the response *before* the LLM has finished generating the entire paragraph. 
- 
-## 5. Handling the Low 4G LTE Environment 
- 
-The exact problem with in-cab assistants is dropping network payloads in rural areas. This architecture solves this via: 
- 
-1.  **Asymmetric Payload Sizing:**  
-   *   *Traditional App:* Sends 100kbps audio stream Up, receives 100kbps audio stream Down. 
-   *   *This Architecture:* Sends 0.5kbps text Up, receives 1kbps text Down. 
-2.  **Streaming Chunk Delivery:** If a connection stalls mid-response, the driver still hears the first half of the instruction.  
- 
- 
-## 6. Fleet Deployment & Pre-requisites (Critical for Offline) 
- 
-For this architecture to succeed without relying on the network, the tablets **must** be pre-configured. The app architecture includes a **Startup Readiness Check**: 
- 
-1.  **Check Local STT Model:** App queries `RecognizerIntent.DETAILS_META_DATA` to ensure the offline language pack is present. 
-2.  **Check Local TTS Voices:** App checks `TextToSpeech.getVoices()` for local high-fidelity models. 
-3.  **Prompt MDM / Admin:** If models are missing, the app refuses to enter "Driving Mode" while connected to LTE and prompts the driver to connect to terminal Wi-Fi to download the required Google/Samsung voice packs (~150MB). 
- 
-## 7. UI/UX & Safety Considerations 
-*   **Hands-Free / Eyes-Free:** The app relies entirely on auditory feedback. The UI displays high-contrast, large, color-coded states (Listening [Green], Thinking [Yellow], Speaking [Blue], Offline [Red]) visible from a peripheral glance. 
-*   **Audio Ducking:** The application uses Android's `AudioManager` to request `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`. This automatically lowers the volume of any music, radio, or GPS navigation playing on the tablet while the Co-Pilot is speaking or listening. 
- 
-## 8. Answer Mode Feature
-The application includes a user-configurable **Answer Mode** that allows drivers to choose between two response styles:
+```
 
-*   **SHORT Mode (Default):** Enforces 1-2 sentence maximum responses, optimized for hands-free, eyes-free driving scenarios. Answers only the specific question asked without extra context.
-*   **LONG Mode:** Provides detailed, comprehensive responses with relevant context and additional helpful information, allowing 3-5 sentences when appropriate.
+### Key Safety and Network Boundaries
+1. **Offline Enforcement:** Both STT and TTS are configured to fail closed if on-device packages/engines are unavailable. There is no cloud-based speech processing fallback.
+2. **Startup Readiness Check:** Gating ensures the application does not enter "Driving Mode" unless all local offline speech dependencies (STT model, TTS high-fidelity voices) and Vertex AI configuration are fully initialized and verified.
+3. **Network Isolation:** Application network calls are strictly reserved for plain text exchange with Google Cloud Vertex AI via the official Gen AI SDK (`VertexAiClient`).
 
-The mode is selectable via a settings button in the UI and dynamically adjusts the system prompt sent to the LLM, ensuring responses match the driver's preference without requiring separate model deployments.
+---
 
-## 9. Summary of Benefits 
-By isolating the Heavy Compute (Audio/Voice processing) to the Galaxy Tab Active 5's native offline stack and isolating the Cognitive Compute (Intelligence) to the remote LLM, this architecture guarantees extreme bandwidth efficiency. A driver in a remote area with only 1 bar of LTE will still experience a highly responsive AI co-pilot, indistinguishable from a broadband connection. 
+## 4. Component Walkthrough
 
-## 10. Network Policy Boundary
-- STT and TTS run in offline-only mode and fail closed when offline prerequisites are missing.
-- Startup readiness gating prevents entering driving mode unless offline STT and offline TTS are available.
-- The only network-enabled function is Vertex AI LLM text exchange via `VertexAiClient`.
+### 4.1 Voice Activity Detection (VAD)
+- Combined use of `AudioRecord` along with Android's native hardware `AcousticEchoCanceler` and `NoiseSuppressor`.
+- Listens continuously in a lightweight loop to detect speech boundaries, minimizing battery drainage and CPU thermal throttling. Activation is also coupled with hardware button keys (e.g., Active Key, Headset Hook).
+
+### 4.2 Offline Speech-to-Text (STT)
+- Implemented using Android's `android.speech.SpeechRecognizer`.
+- Offline capability is validated using `SpeechRecognizer.isOnDeviceRecognitionAvailable(context)`.
+- Rejects cloud fallback paths by utilizing `SpeechRecognizer.createOnDeviceSpeechRecognizer(...)` combined with setting `RecognizerIntent.EXTRA_PREFER_OFFLINE` to `true`.
+
+### 4.3 Vertex AI Network Gateway
+- Leverages the official Google Gen AI SDK (`com.google.genai`).
+- Interacts with **Gemini 2.5 Flash** on Vertex AI.
+- Translates user intent into structured function calls (tools) to query local data endpoints (dashboard, truck info, load parameters, route conditions, financial statements, or messaging interfaces).
+- Optimizes LLM-generated output for speech by enforcing strict TTS formatting instructions (spelling out state names, time structures, percentages, currency, measurement units, and applying strategically spaced ellipses `...` for sequences like BOL numbers to allow writing-down pauses).
+
+### 4.4 Offline Text-to-Speech (TTS)
+- Uses `android.speech.tts.TextToSpeech` configured with offline-only high-quality English voice packs.
+- **Streaming chunks:** Intercepts streamed text responses from Vertex AI at natural punctuation boundaries (`.`, `?`, `!`) and injects them into the TTS queue sequentially. The tablet speaks initial sentences while subsequent tokens are still being processed.
+
+---
+
+## 5. Getting Started & Configuration
+
+### 5.1 Prerequisites
+- **Android Studio** Ladybug (or higher).
+- **Android SDK 35** (compileSdk & targetSdk is 35, minSdk is 34).
+- **Gradle 8.9** (configured via Gradle Wrapper).
+- A valid Google Cloud Project with the **Vertex AI API** enabled.
+
+### 5.2 Project Setup
+1. Clone this repository.
+2. Open the project in Android Studio.
+3. Define the local properties in your root `local.properties` file:
+   ```properties
+   VERTEX_AI_PROJECT_ID="your-gcp-project-id"
+   VERTEX_AI_LOCATION="us-central1" # Or another supported Vertex region (e.g., global, us-east1, us-west1)
+   VERTEX_AI_MODEL="gemini-2.5-flash"
+   ```
+
+### 5.3 API Credentials Setup
+For development and local testing, the application looks for a Service Account key in JSON format inside the assets directory:
+- Path: `app/src/main/assets/vertex-ai-testing1.json`
+- Ensure this file is populated with a valid Google Cloud Service Account JSON file that has `Vertex AI User` permissions.
+- *Note: This asset file is excluded in git ignore paths for security reasons.*
+
+---
+
+## 6. Testing & Verification
+
+The repository contains unit tests validating crucial application policies, such as Vertex AI network boundaries and allowed model types.
+
+To run the local unit tests, execute the following Gradle command from the root directory:
+```bash
+./gradlew test
+```
+
+### Detailed Testing Guide
+For a full list of available voice commands, tool mappings, parameters, and demo data returned from the mock endpoints (such as HOS clocks, truck fault codes, and dispatch inbox structures), consult **[TESTING_GUIDE.md](TESTING_GUIDE.md)**.
+
+---
+
+## 7. Production Deployment & MDM Migration
+
+Using a bundled Google Cloud Service Account JSON file in your APK assets is acceptable during early testing, but it is **not secure** for production environments.
+
+For enterprise deployment, migration to an MDM-managed configuration is required:
+1. Under production builds, the application retrieves the service account credentials dynamically from the secure **Android Restrictions Manager** pocket using Google Play for Work / Managed Configurations.
+2. The config key is `vertex_service_account_json`.
+3. For step-by-step instructions on setting up configuration policies across your fleet, please refer to the **[Production Migration Guide](ProductionMigration.md)**.
+
+---
+
+## 8. UI/UX & Safety Considerations
+
+- **Visual State Indicator:** Uses a large, high-contrast visual orb that is color-coded for quick glance recognition from the driver's seat:
+  - **Green (Pulse):** Listening mode is active.
+  - **Yellow (Spin):** Processing / Thinking (fetching database tools or LLM tokens).
+  - **Blue (Pulse):** Speaking / TTS playback.
+  - **Red:** Offline status, warning, or configuration issue.
+- **Error Boundaries:** If a major service error or network dropout occurs, a red warning border surrounds the visual state indicator, and the system falls back to pre-recorded offline audio notifications.
